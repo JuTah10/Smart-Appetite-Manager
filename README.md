@@ -4,3 +4,99 @@ Smart Appetite Manager is an AI-powered app designed to eliminate food waste by 
 
 ### SAM Architecture
 <img width="1048" height="669" alt="SAM Architecture" src="https://github.com/user-attachments/assets/8fe84e52-3cbd-4d33-9b16-361f47c6ba21" />
+
+# Smart Appetite Manager Setup Instructions
+
+Use the `App/` folder as the project root (not repository root).
+
+## CLI Install + Run (Recommended)
+
+```bash
+cd App
+
+# 1) Create env file
+cp .env.example .env
+```
+
+Edit `App/.env` and set at least:
+
+```env
+LLM_SERVICE_API_KEY=...
+LLM_SERVICE_ENDPOINT=https://api.cerebras.ai/v1
+LLM_SERVICE_PLANNING_MODEL_NAME=openai/gpt-oss-120b
+LLM_SERVICE_GENERAL_MODEL_NAME=openai/gpt-oss-120b
+SOLACE_DEV_MODE=true
+```
+
+For this fork, also add:
+
+```env
+SPOONACULAR_API_KEY=...        # used by recipe tools (App/src/recipe_agent/mealdb_tools.py:17)
+SERPAPI_KEY=...                # used by shopper agent (App/configs/agents/shopper.yaml:70)
+INVENTORY_MANAGER_DB_NAME=inventory.db   # used by inventory agent (App/configs/agents/inventory-manager.yaml:52)
+```
+
+Initialize the inventory DB once:
+
+```bash
+cd App
+sqlite3 inventory.db "CREATE TABLE IF NOT EXISTS inventory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_name TEXT NOT NULL,
+  quantity REAL DEFAULT 0,
+  quantity_unit TEXT,
+  unit TEXT
+);"
+```
+
+Install dependencies and run:
+
+```bash
+uv sync
+uv run sam run configs/
+```
+
+Open: `http://localhost:8000`
+
+If `uv` is missing on macOS:
+
+```bash
+brew install uv
+```
+
+## Docker Alternative
+
+```bash
+cd App
+cp .env.example .env
+# edit .env as above
+docker build -t sam-hackathon-quickstart .
+docker run -d --rm -p 8000:8000 --env-file .env --name sam-app sam-hackathon-quickstart
+```
+
+Logs/stop:
+
+```bash
+docker logs -f sam-app
+docker stop sam-app
+```
+
+## Where To Place the SQL File
+
+No special location is required by the app. Recommended convention:
+
+1. Put the schema file at `App/schema.sql`.
+2. Run from `App/` so relative paths match config:
+
+```bash
+cd App
+sqlite3 inventory.db < schema.sql
+```
+
+3. Keep this in `App/.env`:
+
+```env
+INVENTORY_MANAGER_DB_NAME=inventory.db
+```
+
+With this setup, the DB file lives at `App/inventory.db` when running locally.

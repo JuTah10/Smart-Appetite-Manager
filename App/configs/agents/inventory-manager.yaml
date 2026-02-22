@@ -38,7 +38,7 @@ apps:
 
         BEFORE YOU FINISH: 
         - Send the whole inventory to recipe_lookup agent and let the orchestrator know the next step is to trigger recipe_look up agent to start finding recipe based on the current inventory
-        
+
       tools:
         - tool_type: builtin-group
           group_name: "artifact_management"

@@ -17,6 +17,12 @@ apps:
       agent_name: "ShopperAgent"
       display_name: "The Grocery Scout (Ottawa Local)"
       model: *general_model
+      agent_init_function:
+        module: "rate_limit_init"
+        name: "setup_llm_rate_limit"
+        base_path: "src"
+        config:
+          wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
 
       instruction: |
         You are a professional local shopper for the Ottawa area.

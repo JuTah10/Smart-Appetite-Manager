@@ -24,6 +24,12 @@ apps:
       supports_streaming: true # SQL agent tools are typically request-response
 
       model: *general_model 
+      agent_init_function:
+        module: "rate_limit_init"
+        name: "setup_llm_rate_limit"
+        base_path: "src"
+        config:
+          wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
       instruction: |
         You are Inventory Manager agent. You can read and add inventory items
         using the provided database tools.

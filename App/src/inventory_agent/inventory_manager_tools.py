@@ -17,7 +17,6 @@ def _get_db_path(tool_config: Optional[Dict[str, Any]]) -> Optional[str]:
         return None
     return tool_config.get("db_path")
 
-
 def _open_sqlite(db_path: str) -> sqlite3.Connection:
     if db_path != ":memory:" and not db_path.startswith("file:"):
         db_dir = os.path.dirname(os.path.abspath(db_path))
@@ -28,7 +27,6 @@ def _open_sqlite(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=10, uri=db_path.startswith("file:"))
     _ensure_inventory_schema(conn)
     return conn
-
 
 def _ensure_inventory_schema(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()

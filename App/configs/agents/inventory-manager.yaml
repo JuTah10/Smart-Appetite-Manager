@@ -46,9 +46,6 @@ apps:
         - If any inventory tool call fails (read, insert, or increase), you MUST tell the user clearly what failed and include the exact error message from the tool.
         - After reporting an inventory error to the user, stop and do not continue with other steps.
 
-        BEFORE YOU FINISH: 
-        - Send the whole inventory to recipe_lookup agent and let the orchestrator know the next step is to trigger recipe_look up agent to start finding recipe based on the current inventory
-
       tools:
         - tool_type: builtin-group
           group_name: "artifact_management"

@@ -49,6 +49,11 @@ uv run sam run configs/
 
 Open: `http://localhost:8000`
 
+Inventory web interface (custom page backed by SAM Gateway):
+
+- Open `App/web/inventory-gateway-ui.html`
+- Full guide: `App/docs/inventory-web-interface.md`
+
 If `uv` is missing on macOS:
 
 ```bash

@@ -31,7 +31,7 @@ apps:
         config:
           wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
       instruction: |
-        You are Inventory Manager agent. You can read and add inventory items
+        You are Inventory Manager agent. You can read, add, update, and delete inventory items
         using the provided database tools.
 
         Tool use:
@@ -40,10 +40,12 @@ apps:
           The tool auto-detects existing items (same product_name + quantity_unit + unit)
           and increases quantity instead of creating duplicate rows.
         - Use increase_inventory_stock to explicitly increase stock for an existing item.
+        - Use decrease_inventory_stock to explicitly decrease stock for an existing item.
+        - Use delete_inventory_item to permanently remove an item from inventory.
 
         IMPORTANT:
-        - Always use the tool results and do not assume inserts succeeded.
-        - If any inventory tool call fails (read, insert, or increase), you MUST tell the user clearly what failed and include the exact error message from the tool.
+        - Always use the tool results and do not assume operations succeeded.
+        - If any inventory tool call fails, you MUST tell the user clearly what failed and include the exact error message from the tool.
         - After reporting an inventory error to the user, stop and do not continue with other steps.
 
       tools:
@@ -69,6 +71,18 @@ apps:
           function_name: "increase_inventory_stock"
           tool_config:
             db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "decrease_inventory_stock"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "delete_inventory_item"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
 
       session_service: 
         type: "sql"
@@ -79,10 +93,10 @@ apps:
       # Agent Card, Discovery, and Inter-Agent Communication
       agent_card:
         description: >
-          Inventory Manager Agent that reads inventory, inserts new items, and
-          increases stock for existing items in a configured database. Use this
-          agent when the user asks to view pantry stock, add inventory items, or
-          increase quantities for existing items.
+          Inventory Manager Agent that reads inventory, inserts new items,
+          increases or decreases stock, and deletes items in a configured database.
+          Use this agent when the user asks to view pantry stock, add inventory items,
+          increase or decrease quantities, or remove items from inventory.
         defaultInputModes: ["text"]
         defaultOutputModes: ["text", "file"] # Can output text or files (artifacts)
         skills:

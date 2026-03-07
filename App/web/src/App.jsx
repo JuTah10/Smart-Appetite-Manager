@@ -252,7 +252,7 @@ export default function App() {
   }, [chat]);
 
   return (
-    <main className="shell">
+    <main className="shell chat-page">
       <section className="panel">
         <header className="panel-header">
           <h1>Inventory Control</h1>

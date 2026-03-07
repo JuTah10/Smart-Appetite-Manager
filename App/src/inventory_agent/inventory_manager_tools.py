@@ -416,6 +416,79 @@ async def decrease_inventory_stock(
             pass
 
 
+async def delete_inventory_item(
+    product_name: str,
+    quantity_unit: Optional[str] = None,
+    unit: Optional[str] = None,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Delete an inventory item identified by product_name (and optionally quantity_unit + unit).
+    The item is permanently removed from the database.
+    """
+    log_id = "[InventoryTools:delete_inventory_item]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("delete", "Missing db_path in tool_config.")
+
+    normalized_name = _normalize_text(product_name)
+    if not normalized_name:
+        return _error_response("delete", "Missing product_name.")
+
+    normalized_quantity_unit = _normalize_text(quantity_unit)
+    normalized_unit = _normalize_text(unit)
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        existing = _find_existing_inventory_row(
+            cur=cur,
+            product_name=normalized_name,
+            quantity_unit=normalized_quantity_unit,
+            unit=normalized_unit,
+        )
+        if not existing:
+            return _error_response(
+                "delete",
+                (
+                    f"Item not found. "
+                    f"Lookup key: product_name='{normalized_name}', "
+                    f"quantity_unit='{normalized_quantity_unit}', unit='{normalized_unit}'."
+                ),
+            )
+
+        cur.execute("DELETE FROM inventory WHERE id = ?", (existing["id"],))
+        conn.commit()
+
+        log.info(f"{log_id} Deleted id={existing['id']} product_name='{existing['product_name']}'")
+        return {
+            "status": "success",
+            "deleted": 1,
+            "item": {
+                "id": existing["id"],
+                "product_name": existing["product_name"],
+                "quantity": existing["quantity"],
+                "quantity_unit": existing["quantity_unit"],
+                "unit": existing["unit"],
+            },
+        }
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("delete", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("delete", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 async def list_inventory_items(
     limit: int = 100,
     tool_context: Optional[Any] = None,

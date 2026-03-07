@@ -11,18 +11,9 @@
   --agent: #f6f2ea;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
+.chat-page {
   font-family: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(1200px 500px at -20% -20%, #d9efe7 0%, transparent 70%),
-    radial-gradient(900px 450px at 120% 10%, #eef1d8 0%, transparent 65%),
-    var(--bg);
 }
 
 .shell {
@@ -71,7 +62,7 @@ body {
   margin-bottom: 12px;
 }
 
-label {
+.chat-page label {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
@@ -81,16 +72,16 @@ label {
   font-weight: 600;
 }
 
-input,
-select,
-textarea,
-button {
+.chat-page input,
+.chat-page select,
+.chat-page textarea,
+.chat-page button {
   font: inherit;
 }
 
-input,
-select,
-textarea {
+.chat-page input,
+.chat-page select,
+.chat-page textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -99,7 +90,7 @@ textarea {
   background: #fff;
 }
 
-textarea {
+.chat-page textarea {
   min-height: 110px;
   resize: vertical;
   line-height: 1.4;
@@ -118,7 +109,7 @@ textarea {
   margin-top: 10px;
 }
 
-button {
+.chat-page button {
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 9px 12px;
@@ -128,11 +119,11 @@ button {
   font-weight: 600;
 }
 
-button:hover {
+.chat-page button:hover {
   filter: brightness(0.98);
 }
 
-button:disabled {
+.chat-page button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }

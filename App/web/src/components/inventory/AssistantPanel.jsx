@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { ExecutionTimeline } from "@/components/progress/ExecutionTimeline";
 import { XIcon, SendIcon, MicIcon, MicOffIcon, ChefHatIcon } from "lucide-react";
 
 function AssistantAvatar({ size = "sm" }) {
@@ -68,6 +69,7 @@ export function AssistantPanel({
   open,
   onClose,
   messages,
+  activeTimeline,
   input,
   onInputChange,
   onSend,
@@ -149,13 +151,20 @@ export function AssistantPanel({
                 <AssistantAvatar />
               )}
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                className={`max-w-[84%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
                   message.role === "user"
                     ? "bg-primary text-primary-foreground rounded-br-md"
                     : "bg-muted/60 border rounded-bl-md"
                 }`}
               >
                 {message.text}
+                {message.role === "assistant" && Array.isArray(message.timeline) && message.timeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={message.timeline}
+                    defaultExpanded={false}
+                    className="mt-2"
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -163,12 +172,20 @@ export function AssistantPanel({
           {sending && (
             <div className="flex gap-2 items-end">
               <AssistantAvatar />
-              <div className="bg-muted/60 border rounded-2xl rounded-bl-md px-4 py-2">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
-                </div>
+              <div className="bg-muted/60 border rounded-2xl rounded-bl-md px-3 py-2 max-w-[84%] w-full">
+                {Array.isArray(activeTimeline) && activeTimeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={activeTimeline}
+                    heading="Live backend progress"
+                    defaultExpanded
+                  />
+                ) : (
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
+                  </div>
+                )}
               </div>
             </div>
           )}

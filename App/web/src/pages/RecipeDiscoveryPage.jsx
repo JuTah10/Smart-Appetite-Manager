@@ -1,9 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGateway } from "@/api";
+import { AGENTS } from "@/api/agents";
 import { inventoryRestApi } from "@/api/inventoryRest";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ExecutionTimeline } from "@/components/progress/ExecutionTimeline";
+import {
+  appendExecutionLifecycleStep,
+  applyArtifactUpdateToTimeline,
+  applyStatusUpdateToTimeline,
+  createExecutionTimelineTracker,
+  getExecutionTimelineSnapshot,
+} from "@/lib/executionTimeline";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +39,8 @@ import {
 
 const MEALDB_BASE_URL = "https://www.themealdb.com/api/json/v1/1";
 const BEST_CACHE_KEY = "recipe_best_inventory_cache_v1";
+const GATEWAY_URL_KEY = "inventory_gateway_url";
+const RECIPE_SESSION_KEY = "recipe_gateway_session_id";
 
 const QUICK_TAGS = [
   "Quick dinners",
@@ -42,8 +54,25 @@ const QUICK_TAGS = [
 const CHAT_WELCOME_MESSAGE = {
   id: "recipe-chat-welcome",
   role: "assistant",
-  text: "Recipe assistant is running in local mode. Ask for search ideas or pantry refresh guidance.",
+  text: "Recipe assistant connected. Ask me for recipe recommendations based on your latest inventory.",
 };
+
+function makeSessionId(prefix = "recipe-session") {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return `${prefix}-${window.crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function responseToChatText(result) {
+  if (typeof result?.text === "string" && result.text.trim()) {
+    return result.text.trim();
+  }
+  if (result?.raw && typeof result.raw === "object") {
+    return JSON.stringify(result.raw, null, 2);
+  }
+  return "Done.";
+}
 
 function extractItems(result) {
   if (!result) return [];
@@ -112,6 +141,117 @@ function writeBestCache(payload) {
   localStorage.setItem(BEST_CACHE_KEY, JSON.stringify(record));
 }
 
+function tryParseJSON(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+
+  const jsonBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+  if (jsonBlockMatch) {
+    try {
+      return JSON.parse(jsonBlockMatch[1].trim());
+    } catch {
+      // ignore malformed code block
+    }
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeIngredientValue(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    return String(value.name || value.ingredient || value.item || "").trim();
+  }
+  return "";
+}
+
+function normalizeAgentRecipeList(responseText) {
+  const parsed = tryParseJSON(responseText);
+  const list = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.recipes)
+      ? parsed.recipes
+      : Array.isArray(parsed?.data)
+        ? parsed.data
+        : [];
+
+  const normalized = list
+    .map((recipe, index) => {
+      if (!recipe || typeof recipe !== "object") return null;
+
+      const usedIngredients = Array.isArray(recipe.used_ingredients)
+        ? recipe.used_ingredients.map(normalizeIngredientValue).filter(Boolean)
+        : Array.isArray(recipe.usedIngredients)
+          ? recipe.usedIngredients.map(normalizeIngredientValue).filter(Boolean)
+          : [];
+
+      const missingIngredients = Array.isArray(recipe.missing_ingredients)
+        ? recipe.missing_ingredients.map(normalizeIngredientValue).filter(Boolean)
+        : Array.isArray(recipe.missingIngredients)
+          ? recipe.missingIngredients.map(normalizeIngredientValue).filter(Boolean)
+          : Array.isArray(recipe.missedIngredients)
+            ? recipe.missedIngredients.map(normalizeIngredientValue).filter(Boolean)
+            : [];
+
+      const title = String(recipe.title || recipe.name || "").trim();
+      if (!title) return null;
+
+      return {
+        id: String(recipe.id || recipe.recipe_id || `agent-recipe-${index}`),
+        title,
+        imageUrl: String(recipe.image_url || recipe.image || "").trim(),
+        summary: String(
+          recipe.summary ||
+            recipe.description ||
+            `${usedIngredients.length} pantry ingredients available`
+        ).trim(),
+        usedIngredients,
+        missingIngredients,
+        sourceUrl: String(recipe.source_url || recipe.sourceUrl || "").trim(),
+        provider: "agent",
+      };
+    })
+    .filter(Boolean);
+
+  return normalized;
+}
+
+function normalizeAgentRecipeDetails(responseText, fallbackRecipe) {
+  const parsed = tryParseJSON(responseText);
+  const source =
+    parsed && typeof parsed === "object"
+      ? Array.isArray(parsed)
+        ? parsed[0] || {}
+        : parsed
+      : {};
+
+  const ingredients = Array.isArray(source.ingredients)
+    ? source.ingredients
+        .map((item) => {
+          if (typeof item === "string") return item.trim();
+          if (!item || typeof item !== "object") return "";
+          const name = String(item.name || item.ingredient || "").trim();
+          const measure = String(item.measure || item.amount || "").trim();
+          return `${measure ? `${measure} ` : ""}${name}`.trim();
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    title: String(source.title || fallbackRecipe?.title || "Recipe details").trim(),
+    imageUrl: String(source.image_url || source.image || fallbackRecipe?.imageUrl || "").trim(),
+    ingredients,
+    instructions: String(
+      source.instructions || responseText || "No detailed instructions were returned."
+    ).trim(),
+    sourceUrl: String(source.source_url || source.sourceUrl || fallbackRecipe?.sourceUrl || "").trim(),
+  };
+}
+
 async function fetchMealDb(pathname, params = {}) {
   const url = new URL(`${MEALDB_BASE_URL}/${pathname}`);
   Object.entries(params).forEach(([key, value]) => {
@@ -163,6 +303,7 @@ function toRecipeCard(meal, pantrySet = new Set()) {
     usedIngredients,
     missingIngredients,
     sourceUrl: meal.strSource || meal.strYoutube || "",
+    provider: "mealdb",
   };
 }
 
@@ -195,57 +336,6 @@ async function searchMealsByName(query) {
 async function filterMealsByIngredient(ingredient) {
   const payload = await fetchMealDb("filter.php", { i: ingredient });
   return Array.isArray(payload?.meals) ? payload.meals : [];
-}
-
-async function findBestFromInventory(ingredientNames) {
-  const normalizedNames = [...new Set(ingredientNames.map(normalizeText).filter(Boolean))];
-  if (!normalizedNames.length) return [];
-
-  const seedIngredients = normalizedNames.slice(0, 8);
-  const pantrySet = new Set(normalizedNames);
-
-  const resultSets = await Promise.all(
-    seedIngredients.map((ingredient) =>
-      filterMealsByIngredient(ingredient).catch(() => [])
-    )
-  );
-
-  const scoreMap = new Map();
-  resultSets.forEach((meals) => {
-    meals.forEach((meal) => {
-      if (!meal?.idMeal) return;
-      const current = scoreMap.get(meal.idMeal) || { meal, score: 0 };
-      current.score += 1;
-      scoreMap.set(meal.idMeal, current);
-    });
-  });
-
-  const ranked = [...scoreMap.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 12);
-
-  const detailedMeals = await Promise.all(
-    ranked.map(async ({ meal, score }) => {
-      const detail = await getMealById(meal.idMeal).catch(() => null);
-      return { meal: detail || meal, score };
-    })
-  );
-
-  return detailedMeals
-    .map(({ meal, score }) => {
-      const card = toRecipeCard(meal, pantrySet);
-      if (!card) return null;
-      return { ...card, matchScore: score };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      if (a.usedIngredients.length !== b.usedIngredients.length) {
-        return b.usedIngredients.length - a.usedIngredients.length;
-      }
-      return (b.matchScore || 0) - (a.matchScore || 0);
-    })
-    .slice(0, 3)
-    .map(({ matchScore, ...recipe }) => recipe);
 }
 
 function useSpeechRecognition(onResult) {
@@ -312,6 +402,7 @@ function RecipeAssistantPanel({
   open,
   onClose,
   messages,
+  activeTimeline,
   input,
   sending,
   onInputChange,
@@ -355,7 +446,7 @@ function RecipeAssistantPanel({
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-foreground leading-tight">Recipe Assistant</h2>
             <p className="text-xs text-muted-foreground truncate leading-tight">
-              Local helper mode for search and pantry refresh hints.
+              Connected to SAM for live recipe guidance.
             </p>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose}>
@@ -378,6 +469,15 @@ function RecipeAssistantPanel({
                 }`}
               >
                 {message.text}
+                {message.role === "assistant" &&
+                Array.isArray(message.timeline) &&
+                message.timeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={message.timeline}
+                    defaultExpanded={false}
+                    className="mt-2"
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -385,12 +485,20 @@ function RecipeAssistantPanel({
           {sending && (
             <div className="flex gap-2 items-end">
               <AssistantAvatar />
-              <div className="bg-muted/60 border rounded-2xl rounded-bl-md px-4 py-2">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
-                </div>
+              <div className="bg-muted/60 border rounded-2xl rounded-bl-md px-3 py-2 max-w-[84%] w-full">
+                {Array.isArray(activeTimeline) && activeTimeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={activeTimeline}
+                    heading="Live backend progress"
+                    defaultExpanded
+                  />
+                ) : (
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -484,6 +592,7 @@ function RecipeCard({ recipe, onView }) {
 }
 
 export default function RecipeDiscoveryPage() {
+  const { client } = useGateway();
   const [inventorySuggestions, setInventorySuggestions] = useState([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryChecking, setInventoryChecking] = useState(false);
@@ -511,8 +620,10 @@ export default function RecipeDiscoveryPage() {
   const [chatMessages, setChatMessages] = useState([CHAT_WELCOME_MESSAGE]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [chatActiveTimeline, setChatActiveTimeline] = useState([]);
 
   const msgIdRef = useRef(1);
+  const chatTimelineTrackerRef = useRef(null);
 
   useEffect(() => {
     const className = "inventory-chat-open";
@@ -526,6 +637,15 @@ export default function RecipeDiscoveryPage() {
       document.body.classList.remove(className);
     };
   }, [chatOpen]);
+
+  useEffect(() => {
+    const savedGatewayUrl = localStorage.getItem(GATEWAY_URL_KEY) || "http://localhost:8000";
+    const savedSessionId = localStorage.getItem(RECIPE_SESSION_KEY) || makeSessionId();
+    client.setGatewayUrl(savedGatewayUrl);
+    client.setSessionId(savedSessionId);
+    localStorage.setItem(GATEWAY_URL_KEY, savedGatewayUrl);
+    localStorage.setItem(RECIPE_SESSION_KEY, savedSessionId);
+  }, [client]);
 
   const fetchCurrentInventory = useCallback(async () => {
     const result = await inventoryRestApi.list();
@@ -626,9 +746,24 @@ export default function RecipeDiscoveryPage() {
       }
 
       const fingerprint = inventoryFingerprint(rows);
-      const recipes = await findBestFromInventory(names);
+      const inventoryPayload = rows.map((row) => ({
+        product_name: row.name,
+        quantity: row.quantity,
+        unit: row.unit,
+      }));
+
+      const response = await client.send(
+        `Based on this inventory JSON, recommend the best 3 recipes. Return ONLY JSON array with fields: id, title, summary, used_ingredients (array), missing_ingredients (array), image_url, source_url.\nInventory: ${JSON.stringify(
+          inventoryPayload
+        )}`,
+        AGENTS.RECIPE_RESEARCH
+      );
+
+      localStorage.setItem(RECIPE_SESSION_KEY, client.getSessionId());
+
+      const recipes = normalizeAgentRecipeList(response.text);
       if (!recipes.length) {
-        throw new Error("No matching recipes found for your pantry.");
+        throw new Error("Recipe agent did not return a valid recipe list.");
       }
 
       const generatedAt = new Date().toISOString();
@@ -636,8 +771,6 @@ export default function RecipeDiscoveryPage() {
       setInventoryFreshness("fresh");
       setCachedFingerprint(fingerprint);
       setInventoryLastUpdated(new Date(generatedAt));
-      setRecipeResults((prev) => (prev.length ? prev : recipes));
-
       writeBestCache({
         recipes,
         generatedAt,
@@ -651,7 +784,7 @@ export default function RecipeDiscoveryPage() {
     } finally {
       setInventoryLoading(false);
     }
-  }, [fetchCurrentInventory]);
+  }, [client, fetchCurrentInventory]);
 
   const runRecipeSearch = useCallback(
     async (query) => {
@@ -701,6 +834,17 @@ export default function RecipeDiscoveryPage() {
     setDetailLoading(true);
 
     try {
+      if (recipe.provider === "agent") {
+        const response = await client.send(
+          `Provide full details for this recipe: "${recipe.title}". Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`,
+          AGENTS.RECIPE_RESEARCH
+        );
+        localStorage.setItem(RECIPE_SESSION_KEY, client.getSessionId());
+        const details = normalizeAgentRecipeDetails(response.text, recipe);
+        setRecipeDetails(details);
+        return;
+      }
+
       const meal = await getMealById(recipe.id);
       if (!meal) {
         throw new Error("Could not load recipe details.");
@@ -712,13 +856,11 @@ export default function RecipeDiscoveryPage() {
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [client]);
 
   const sendChat = useCallback(async () => {
     const prompt = chatInput.trim();
     if (!prompt || chatSending) return;
-
-    const promptLower = prompt.toLowerCase();
 
     setChatMessages((prev) => [
       ...prev,
@@ -731,33 +873,71 @@ export default function RecipeDiscoveryPage() {
     setChatInput("");
     setChatSending(true);
 
-    let reply = "Try searching in the main bar above, or use quick tags for instant recipe results.";
+    const tracker = createExecutionTimelineTracker();
+    chatTimelineTrackerRef.current = tracker;
+    appendExecutionLifecycleStep(tracker, {
+      status: "info",
+      title: "Task submitted",
+    });
+    setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
 
-    if (promptLower.includes("inventory") || promptLower.includes("pantry") || promptLower.includes("best")) {
-      if (inventorySuggestions.length) {
-        const titles = inventorySuggestions.map((recipe) => `- ${recipe.title}`).join("\n");
-        const freshnessNote =
-          inventoryFreshness === "stale"
-            ? "\nYour cached pantry matches are outdated. Click Refresh in 'Best from your inventory'."
-            : "";
-        reply = `Current cached pantry matches:\n${titles}${freshnessNote}`;
-      } else {
-        reply = "No pantry matches are cached yet. Click Generate in 'Best from your inventory' to create and store them.";
-      }
-    } else if (promptLower.includes("search") || promptLower.includes("find") || promptLower.includes("recipe")) {
-      reply = "I can help with local search. Type ingredients or dish names in the top search bar (for example: chicken, pasta, curry).";
+    try {
+      const response = await client.send(prompt, AGENTS.RECIPE_RESEARCH, {
+        onStatus: (statusText, payload) => {
+          const changed = applyStatusUpdateToTimeline(tracker, statusText, payload);
+          if (changed) {
+            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
+          }
+        },
+        onArtifact: (payload) => {
+          const changed = applyArtifactUpdateToTimeline(tracker, payload);
+          if (changed) {
+            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
+          }
+        },
+      });
+      localStorage.setItem(RECIPE_SESSION_KEY, client.getSessionId());
+
+      appendExecutionLifecycleStep(tracker, {
+        status: "completed",
+        title: "Final response received",
+      });
+      const timeline = getExecutionTimelineSnapshot(tracker);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `recipe-chat-assistant-${msgIdRef.current++}`,
+          role: "assistant",
+          text: responseToChatText(response),
+          timeline,
+        },
+      ]);
+      setChatActiveTimeline([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      appendExecutionLifecycleStep(tracker, {
+        status: "error",
+        title: "Request failed",
+        detail: message,
+      });
+      const timeline = getExecutionTimelineSnapshot(tracker);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `recipe-chat-error-${msgIdRef.current++}`,
+          role: "assistant",
+          text: `Request failed: ${message}`,
+          timeline,
+        },
+      ]);
+      setChatActiveTimeline([]);
+      toast.error("Recipe assistant failed", { description: message });
+    } finally {
+      chatTimelineTrackerRef.current = null;
+      setChatSending(false);
     }
-
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: `recipe-chat-assistant-${msgIdRef.current++}`,
-        role: "assistant",
-        text: reply,
-      },
-    ]);
-    setChatSending(false);
-  }, [chatInput, chatSending, inventoryFreshness, inventorySuggestions]);
+  }, [chatInput, chatSending, client]);
 
   const inventoryMeta = useMemo(() => {
     if (!inventoryItemCount) return "Pantry is empty";
@@ -1008,6 +1188,7 @@ export default function RecipeDiscoveryPage() {
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         messages={chatMessages}
+        activeTimeline={chatActiveTimeline}
         input={chatInput}
         sending={chatSending}
         onInputChange={setChatInput}

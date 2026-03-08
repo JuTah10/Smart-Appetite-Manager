@@ -9,6 +9,13 @@ import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
 import { AssistantPanel } from "@/components/inventory/AssistantPanel";
+import {
+  appendExecutionLifecycleStep,
+  applyArtifactUpdateToTimeline,
+  applyStatusUpdateToTimeline,
+  createExecutionTimelineTracker,
+  getExecutionTimelineSnapshot,
+} from "@/lib/executionTimeline";
 
 const gatewayStorage = {
   gatewayUrl: "inventory_gateway_url",
@@ -66,6 +73,7 @@ export default function InventoryPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [chatActiveTimeline, setChatActiveTimeline] = useState([]);
   const [chatSessionId, setChatSessionId] = useState("");
   const [chatMessages, setChatMessages] = useState([
     {
@@ -75,6 +83,7 @@ export default function InventoryPage() {
     },
   ]);
   const fetchingRef = useRef(false);
+  const chatTimelineTrackerRef = useRef(null);
 
   const persistSession = useCallback(() => {
     const currentSessionId = client.getSessionId();
@@ -219,6 +228,14 @@ export default function InventoryPage() {
     const prompt = chatInput.trim();
     if (!prompt || chatSending) return;
 
+    const tracker = createExecutionTimelineTracker();
+    chatTimelineTrackerRef.current = tracker;
+    appendExecutionLifecycleStep(tracker, {
+      status: "info",
+      title: "Task submitted",
+    });
+    setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
+
     const userMessage = {
       id: `chat-user-${Date.now()}`,
       role: "user",
@@ -229,29 +246,62 @@ export default function InventoryPage() {
     setChatSending(true);
 
     try {
-      const result = await api.inventory.prompt(prompt);
+      const result = await api.inventory.prompt(prompt, {
+        onStatus: (statusText, payload) => {
+          const changed = applyStatusUpdateToTimeline(tracker, statusText, payload);
+          if (changed) {
+            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
+          }
+        },
+        onArtifact: (payload) => {
+          const changed = applyArtifactUpdateToTimeline(tracker, payload);
+          if (changed) {
+            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
+          }
+        },
+      });
       persistSession();
+
+      appendExecutionLifecycleStep(tracker, {
+        status: "completed",
+        title: "Final response received",
+      });
+      const timeline = getExecutionTimelineSnapshot(tracker);
+
       setChatMessages((prev) => [
         ...prev,
         {
           id: `chat-assistant-${Date.now()}`,
           role: "assistant",
           text: responseToChatText(result),
+          timeline,
         },
       ]);
+      setChatActiveTimeline([]);
       await fetchItems({ background: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+
+      appendExecutionLifecycleStep(tracker, {
+        status: "error",
+        title: "Request failed",
+        detail: message,
+      });
+      const timeline = getExecutionTimelineSnapshot(tracker);
+
       setChatMessages((prev) => [
         ...prev,
         {
           id: `chat-assistant-error-${Date.now()}`,
           role: "assistant",
           text: `Request failed: ${message}`,
+          timeline,
         },
       ]);
+      setChatActiveTimeline([]);
       toast.error("Inventory chat failed", { description: message });
     } finally {
+      chatTimelineTrackerRef.current = null;
       setChatSending(false);
     }
   }, [api, chatInput, chatSending, fetchItems, persistSession]);
@@ -376,6 +426,7 @@ export default function InventoryPage() {
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         messages={chatMessages}
+        activeTimeline={chatActiveTimeline}
         input={chatInput}
         onInputChange={setChatInput}
         onSend={() => void sendChat()}

@@ -44,6 +44,13 @@ def _parse_allowed_origins() -> List[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def _parse_allowed_origin_regex() -> str:
+    return os.getenv(
+        "INVENTORY_API_ALLOWED_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$",
+    )
+
+
 app = FastAPI(
     title="Smart Appetite Inventory API",
     description="Read-only REST API for inventory list sync (no token required).",
@@ -53,6 +60,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_allowed_origins(),
+    allow_origin_regex=_parse_allowed_origin_regex(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

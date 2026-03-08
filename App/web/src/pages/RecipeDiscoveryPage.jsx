@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   SendIcon,
   MicIcon,
@@ -63,13 +65,15 @@ function useSpeechRecognition(onResult) {
 const WELCOME_MESSAGE = {
   id: "welcome",
   role: "assistant",
-  text: `Welcome to Recipe Discovery! I can help you find recipes based on your inventory, explore new dishes, and find deals on missing ingredients.
+  text: `
+# Welcome to Recipe Discovery 💡! 
+I can help you find recipes based on your inventory, explore new dishes, and find deals on missing ingredients.
 
-Here are some things you can ask me:
-• "What can I cook with my inventory?"
-• "Find me a quick pasta recipe"
-• "Suggest healthy dinner ideas"
-• "What recipes can I make with chicken and rice?"`,
+### Here are some things you can ask me:
+* "What can I cook with my inventory?"
+* "Find me a quick pasta recipe"
+* "Suggest healthy dinner ideas"
+* "What recipes can I make with chicken and rice?"`,
 };
 
 const SUGGESTED_PROMPTS = [
@@ -126,7 +130,7 @@ export default function RecipeDiscoveryPage() {
         const assistantMsg = {
           id: `assistant-${++msgIdRef.current}`,
           role: "assistant",
-          text: response.text,
+          text: typeof response.text === "string" ? response.text : "",
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } catch (err) {
@@ -197,13 +201,83 @@ export default function RecipeDiscoveryPage() {
                   </div>
                 )}
                 <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                     message.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
+                      ? "bg-primary text-primary-foreground rounded-br-md whitespace-pre-wrap"
                       : "bg-muted/60 border rounded-bl-md"
                   }`}
                 >
-                  {message.text}
+                  {message.role === "assistant" ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h1: ({ node, ...props }) => (
+                          <h1 className="text-base font-semibold mt-2 mb-1 first:mt-0" {...props} />
+                        ),
+                        h2: ({ node, ...props }) => (
+                          <h2 className="text-[15px] font-semibold mt-2 mb-1 first:mt-0" {...props} />
+                        ),
+                        h3: ({ node, ...props }) => (
+                          <h3 className="font-semibold mt-2 mb-1 first:mt-0" {...props} />
+                        ),
+                        h4: ({ node, ...props }) => (
+                          <h4 className="font-medium mt-2 mb-1 first:mt-0" {...props} />
+                        ),
+                        p: ({ node, ...props }) => (
+                          <p className="my-1 leading-relaxed first:mt-0 last:mb-0" {...props} />
+                        ),
+                        ul: ({ node, ...props }) => (
+                          <ul className="list-disc pl-5 my-1 space-y-0.5" {...props} />
+                        ),
+                        ol: ({ node, ...props }) => (
+                          <ol className="list-decimal pl-5 my-1 space-y-0.5" {...props} />
+                        ),
+                        li: ({ node, ...props }) => (
+                          <li className="leading-relaxed" {...props} />
+                        ),
+                        strong: ({ node, ...props }) => (
+                          <strong className="font-semibold" {...props} />
+                        ),
+                        code: ({ node, inline, className, children, ...props }) =>
+                          inline ? (
+                            <code
+                              className="rounded bg-foreground/10 px-1 py-0.5 font-mono text-[0.82em]"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          ) : (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          ),
+                        pre: ({ node, ...props }) => (
+                          <pre
+                            className="my-2 overflow-x-auto rounded-md bg-foreground/10 p-2 text-xs"
+                            {...props}
+                          />
+                        ),
+                        blockquote: ({ node, ...props }) => (
+                          <blockquote
+                            className="my-2 border-l-2 border-foreground/30 pl-3 italic"
+                            {...props}
+                          />
+                        ),
+                        a: ({ node, ...props }) => (
+                          <a
+                            className="underline underline-offset-2 hover:opacity-80"
+                            target="_blank"
+                            rel="noreferrer"
+                            {...props}
+                          />
+                        ),
+                      }}
+                    >
+                      {message.text || ""}
+                    </ReactMarkdown>
+                  ) : (
+                    message.text
+                  )}
                 </div>
               </div>
             ))}

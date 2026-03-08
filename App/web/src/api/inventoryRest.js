@@ -31,12 +31,20 @@ export function createInventoryRestClient(baseUrl = DEFAULT_INVENTORY_API_URL) {
   const root = normalizeBaseUrl(baseUrl);
 
   async function request(path, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    const method = String(options.method || "GET").toUpperCase();
+    const hasBody = options.body !== undefined && options.body !== null;
+    const hasExplicitContentType = Object.keys(headers).some(
+      (key) => key.toLowerCase() === "content-type"
+    );
+
+    if (hasBody && method !== "GET" && method !== "HEAD" && !hasExplicitContentType) {
+      headers["Content-Type"] = "application/json";
+    }
+
     const response = await fetch(`${root}${path}`, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
+      headers,
     });
 
     const payload = await parseJsonSafely(response);

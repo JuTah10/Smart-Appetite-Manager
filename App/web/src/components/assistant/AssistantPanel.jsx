@@ -1,0 +1,294 @@
+import React, { useCallback, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { ExecutionTimeline } from "@/components/progress/ExecutionTimeline";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { useResizableSidebar } from "@/lib/useResizableSidebar";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import {
+  XIcon,
+  SendIcon,
+  MicIcon,
+  MicOffIcon,
+  ChefHatIcon,
+  SparklesIcon,
+} from "lucide-react";
+
+function AssistantAvatar({ size = "sm" }) {
+  const sizeClass =
+    size === "lg"
+      ? "w-16 h-16"
+      : size === "md"
+        ? "w-10 h-10"
+        : "w-7 h-7";
+  const iconClass =
+    size === "lg"
+      ? "w-8 h-8 text-white"
+      : size === "md"
+        ? "w-5 h-5 text-white"
+        : "w-4 h-4 text-white";
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0 shadow-md`}
+    >
+      <ChefHatIcon className={iconClass} />
+    </div>
+  );
+}
+
+/**
+ * Self-contained assistant chat sidebar panel.
+ *
+ * @param {object} props
+ * @param {boolean} props.open - Whether the panel is visible
+ * @param {() => void} props.onClose - Close handler
+ * @param {string} props.title - Panel header title
+ * @param {string} props.subtitle - Panel header subtitle
+ * @param {Array} props.messages - Chat messages from useAssistantChat
+ * @param {Array} props.activeTimeline - Active timeline from useAssistantChat
+ * @param {string} props.input - Current input text
+ * @param {(value: string | ((prev: string) => string)) => void} props.onInputChange
+ * @param {() => void} props.onSend - Send handler
+ * @param {boolean} props.sending - Whether a message is being sent
+ * @param {string[]} [props.suggestions] - Optional quick suggestion buttons
+ * @param {(tag: string) => void} [props.onSuggestionClick] - Suggestion click handler
+ */
+export function AssistantPanel({
+  open,
+  onClose,
+  title = "Kitchen Assistant",
+  subtitle = "I can help manage your inventory. Just ask!",
+  messages,
+  activeTimeline,
+  input,
+  onInputChange,
+  onSend,
+  sending,
+  suggestions,
+  onSuggestionClick,
+}) {
+  const scrollRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const handleDictation = useCallback(
+    (transcript) => {
+      onInputChange((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    },
+    [onInputChange]
+  );
+
+  const { listening, toggle: toggleMic, supported: micSupported } =
+    useSpeechRecognition(handleDictation);
+  const { panelWidth, isResizing, startResize } = useResizableSidebar({
+    storageKey: "assistant_sidebar_width",
+  });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, open]);
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  // Manage body class for layout shift
+  useEffect(() => {
+    const className = "inventory-chat-open";
+    if (open) {
+      document.body.classList.add(className);
+    } else {
+      document.body.classList.remove(className);
+    }
+    return () => document.body.classList.remove(className);
+  }, [open]);
+
+  return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/10 transition-opacity duration-200 sm:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <div
+        style={{ "--assistant-panel-width": `${panelWidth}px` }}
+        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[var(--assistant-panel-width)] border-l shadow-2xl flex flex-col transition-transform duration-300 ease-out bg-[radial-gradient(circle_at_top,_rgba(255,247,236,0.95),_rgba(255,255,255,0.98)_45%),linear-gradient(180deg,_rgba(255,250,244,0.88),_rgba(255,255,255,1))] ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <button
+          type="button"
+          className={`hidden sm:block absolute left-0 top-0 h-full w-2 -translate-x-1/2 cursor-col-resize ${
+            isResizing ? "bg-amber-300/30" : "bg-transparent"
+          }`}
+          onMouseDown={startResize}
+          aria-label="Resize assistant panel"
+        />
+
+        {/* Header */}
+        <div className="flex h-14 items-center gap-3 px-4 border-b bg-gradient-to-r from-amber-50 to-orange-50">
+          <AssistantAvatar size="md" />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold text-foreground leading-tight">
+              {title}
+            </h2>
+            <p className="text-xs text-muted-foreground leading-tight truncate">
+              {subtitle}
+            </p>
+          </div>
+          <Button variant="ghost" size="icon-sm" onClick={onClose}>
+            <XIcon className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Suggestions */}
+        {Array.isArray(suggestions) && suggestions.length > 0 && (
+          <div className="px-4 py-2 border-b bg-background">
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((tag) => (
+                <Button
+                  key={`chat-suggestion-${tag}`}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-white"
+                  onClick={() => onSuggestionClick?.(tag)}
+                  disabled={sending}
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  {tag}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Messages */}
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,250,243,0.55))]"
+        >
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex gap-2 ${
+                message.role === "user" ? "flex-row-reverse" : "flex-row"
+              }`}
+            >
+              {message.role === "assistant" && <AssistantAvatar />}
+              <div
+                className={`max-w-[84%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-br-md"
+                    : "bg-white/95 border border-amber-200/70 shadow-sm rounded-bl-md"
+                }`}
+              >
+                {message.role === "assistant" ? (
+                  <MarkdownRenderer content={message.text} />
+                ) : (
+                  message.text
+                )}
+                {message.role === "assistant" &&
+                Array.isArray(message.timeline) &&
+                message.timeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={message.timeline}
+                    defaultExpanded={false}
+                    className="mt-2"
+                  />
+                ) : null}
+              </div>
+            </div>
+          ))}
+
+          {sending && (
+            <div className="flex gap-2 items-end">
+              <AssistantAvatar />
+              <div className="bg-white/90 border border-amber-200/70 rounded-2xl rounded-bl-md px-3 py-2 max-w-[84%] w-full shadow-sm">
+                {Array.isArray(activeTimeline) &&
+                activeTimeline.length > 0 ? (
+                  <ExecutionTimeline
+                    steps={activeTimeline}
+                    heading="Live backend progress"
+                    defaultExpanded
+                  />
+                ) : (
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
+                    <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input area */}
+        <div className="border-t px-4 py-3 bg-background">
+          <div className="flex items-end gap-2">
+            {micSupported && (
+              <Button
+                variant={listening ? "destructive" : "ghost"}
+                size="icon"
+                onClick={toggleMic}
+                disabled={sending}
+                title={listening ? "Stop dictation" : "Start dictation"}
+                className="shrink-0"
+              >
+                {listening ? (
+                  <MicOffIcon className="w-4 h-4" />
+                ) : (
+                  <MicIcon className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+            <div className="relative flex-1">
+              <textarea
+                ref={inputRef}
+                className="flex min-h-[44px] max-h-[200px] w-full rounded-xl border border-input bg-muted/30 px-3 py-2.5 pr-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto"
+                style={{ fieldSizing: "content" }}
+                placeholder={
+                  listening
+                    ? "Listening..."
+                    : 'Try "Add 2 kg rice" or "What do I have?"'
+                }
+                value={input}
+                onChange={(e) => {
+                  onInputChange(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height =
+                    Math.min(e.target.scrollHeight, 200) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    onSend();
+                  }
+                }}
+                disabled={sending}
+                rows={1}
+              />
+            </div>
+            <Button
+              size="icon"
+              onClick={onSend}
+              disabled={sending || !input.trim()}
+              className="shrink-0 rounded-xl"
+            >
+              <SendIcon className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
+            Press Enter to send
+            {micSupported ? " · Click mic to dictate" : ""}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}

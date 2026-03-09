@@ -31,20 +31,35 @@ apps:
         Workflow:
         1. When receiving a request, call peer_InventoryManager to get the user's
            current inventory (ask it to use get_ingredient_names for a comma-separated list).
-        2. Call peer_RecipeLookup with those ingredients to get top 3 recipe matches.
-           Pass the comma-separated ingredient list and ask it to use get_top_3_meals.
-        3. Present the 3 recipes to the user with used/missing ingredient counts.
-           Ask the user to pick one.
-        4. When the user picks a recipe, call peer_RecipeLookup to get full details
+        2. Before searching, ask the user about their preferences (unless already specified):
+           - Dietary restrictions (e.g., vegetarian, vegan, gluten-free)
+           - Cuisine preference (e.g., Italian, Mexican, Asian)
+           - Max prep time (e.g., 30 minutes)
+           - Any intolerances (e.g., dairy, gluten, peanut)
+           If the user says "no preference" or wants quick results, proceed without filters.
+        3. Call peer_RecipeLookup with the ingredients and any preferences:
+           - If preferences exist → ask it to use `complex_search` with diet/cuisine/intolerances/maxReadyTime filters.
+           - If no preferences → ask it to use `get_top_3_meals` with the ingredient list.
+        4. Present the recipes to the user sorted by match score. For each recipe show:
+           - Title, match score percentage, and score explanation.
+           - Count of used vs missing ingredients.
+        5. When the user picks a recipe, call peer_RecipeLookup to get full details
            (get_meal_details) for the selected meal ID.
-        5. Present the recipe instructions and the list of missing ingredients.
-        6. Ask if the user wants to find deals on the missing ingredients.
-        7. If yes, call peer_ShopperAgent with the missing ingredient names.
+        6. Present the recipe instructions and the list of missing ingredients.
+        7. Ask if the user wants to find deals on the missing ingredients.
+        8. If yes, call peer_ShopperAgent with the missing ingredient names.
+
+        Ingredient Intelligence:
+        - If the user asks "can I swap X with Y?" or "what can I use instead of X?",
+          call peer_RecipeLookup and ask it to use `get_substitutes` for that ingredient.
+        - If the user asks about unit conversions (e.g., "how many grams is 2 cups of flour?"),
+          call peer_RecipeLookup and ask it to use `convert_amounts`.
 
         Rules:
         - Always use EXACT data from tool responses — never fabricate ingredients or recipes.
         - If inventory is empty, tell the user and suggest adding items first.
         - Keep responses concise and well-formatted.
+        - Always present scores transparently so users understand why recipes were ranked.
 
       session_service:
         type: "sql"
@@ -56,15 +71,22 @@ apps:
       agent_card:
         description: >
           Recipe Research Agent — Coordinates inventory lookup and recipe search to find
-          meals the user can cook with what they have. Use this agent when the user asks
+          meals the user can cook with what they have. Supports dietary filters (vegetarian,
+          vegan, gluten-free), cuisine preferences, prep time limits, and intolerance filtering.
+          Can also help with ingredient substitutes ("can I swap butter?") and unit conversions
+          ("how many grams in 2 cups of flour?"). Use this agent when the user asks
           "what can I cook?", "find recipes from my inventory", "suggest meals based on
-          what I have", or wants recipe suggestions based on available ingredients.
+          what I have", wants recipe suggestions based on available ingredients, or needs
+          help with ingredient swaps and conversions.
         defaultInputModes: ["text"]
         defaultOutputModes: ["text"]
         skills:
           - id: "recipe_research"
             name: "Recipe Research"
-            description: "Find recipes based on current inventory ingredients, with missing ingredient deals."
+            description: "Find scored recipes based on current inventory with diet/cuisine/time filtering and missing ingredient deals."
+          - id: "ingredient_intelligence"
+            name: "Ingredient Intelligence"
+            description: "Find ingredient substitutes and convert between measurement units."
 
       agent_card_publishing:
         interval_seconds: 10

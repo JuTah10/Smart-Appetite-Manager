@@ -28,18 +28,38 @@ apps:
         You are a recipe lookup assistant.
 
         Your job:
-        1) You will find top recipe based on user's ingredients from the inventory.
-        2) Use the `get_top_3_meals` tool to find the top 3 recipes that best match the user's ingredients. The search results will include a summary of used and missing ingredients for each recipe.
-        3) Present the top 3 meal options to the user, including the used and missing ingredient counts.
-        4) When the user chooses an option, present the detailed lists of "Used Ingredients" and "Missing Ingredients" that you received from the `get_top_3_meals` call for that specific recipe.
-        5) Then, use the `get_meal_details` tool for the selected recipe to fetch and display the full step-by-step cooking instructions.
+        1) Find recipes based on the user's ingredients, preferences, and dietary needs.
+        2) Choose the right search tool:
+           - If the user provides diet, cuisine, intolerances, or time constraints → use `complex_search`.
+           - If the user only provides a simple ingredient list → use `get_top_3_meals`.
+        3) Present results sorted by `final_score` (highest first). For each recipe, show:
+           - Title, match score (as percentage), and the score explanation.
+           - Used and missing ingredient counts.
+        4) When the user chooses a recipe, use `get_meal_details` to fetch full instructions.
+        5) If the user asks "can I swap X?" or about substitutes, use `get_substitutes`.
+        6) If the user asks about unit conversions, use `convert_amounts`.
+        7) If the user provides free-text ingredient descriptions, use `parse_ingredients` to structure them.
+
+        IMPORTANT:
+        - Always use EXACT data from tool responses — never fabricate recipes or scores.
+        - Always present the score explanation to help users understand why a recipe ranked where it did.
+        - If a search returns 0 results, the tool will automatically try fallback strategies.
 
       Tool use: |
-        - When the user provides ingredients, call `get_top_3_meals` with the `ingredients` parameter. For example: `get_top_3_meals(ingredients='chicken,rice')`.
-        - The `get_top_3_meals` tool will return all the information you need about used and missing ingredients. Do not call `get_meal_details` to get this information.
-        - After the user selects a meal, use its ID to get the cooking instructions: `get_meal_details(meal_id=...)`.
+        - `complex_search`: Advanced search with filters. Example: `complex_search(ingredients='chicken,rice', diet='vegetarian', cuisine='italian', max_ready_time=30)`.
+        - `get_top_3_meals`: Quick ingredient-based search. Example: `get_top_3_meals(ingredients='chicken,rice')`. Returns scored results.
+        - `search_meals`: Legacy search that auto-delegates to complex_search when filters are present.
+        - `get_meal_details`: Get full recipe with analyzed instructions. Example: `get_meal_details(meal_id='12345')`.
+        - `get_substitutes`: Find ingredient substitutes. Example: `get_substitutes(ingredient_name='butter')`.
+        - `convert_amounts`: Convert units. Example: `convert_amounts(ingredient_name='flour', source_amount=2, source_unit='cups', target_unit='grams')`.
+        - `parse_ingredients`: Parse free-text ingredients. Example: `parse_ingredients(ingredient_list='2 cups flour\n1 tsp salt')`.
 
       tools:
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "complex_search"
+
         - tool_type: python
           component_base_path: "src"
           component_module: "recipe_agent.mealdb_tools"
@@ -60,6 +80,21 @@ apps:
           component_module: "recipe_agent.mealdb_tools"
           function_name: "get_random_meal"
 
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "parse_ingredients"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "convert_amounts"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "get_substitutes"
+
       session_service:
         type: ${PERSISTENCE_TYPE, memory}
         database_url: ${CUSTOM_AGENT_DATABASE_URL,}
@@ -68,18 +103,32 @@ apps:
 
       agent_card:
         description: >
-          Looks up recipes online using Spoonacular, then formats ingredients and
-          step-by-step cooking directions. Use this agent when the user asks for a
-          recipe, meal ideas, or "what can I cook with X".
+          Looks up recipes online using Spoonacular with advanced filtering (diet, cuisine,
+          intolerances, prep time), transparent scoring, and ingredient intelligence
+          (substitutes, unit conversion, ingredient parsing). Use this agent when the user
+          asks for a recipe, meal ideas, "what can I cook with X", wants filtered recipe
+          search, needs ingredient substitutes, or unit conversions.
         defaultInputModes: ["text"]
         defaultOutputModes: ["text"]
         skills:
           - id: "recipe_search"
             name: "Search recipes"
-            description: "Find recipes by ingredient."
+            description: "Find recipes by ingredient with optional diet, cuisine, intolerance, and time filters."
+          - id: "recipe_complex_search"
+            name: "Advanced recipe search"
+            description: "Search with diet, cuisine, intolerance filters and transparent scoring."
           - id: "recipe_details"
             name: "Get recipe details"
-            description: "Fetch full ingredients and instructions for a selected recipe."
+            description: "Fetch full ingredients, analyzed instructions, and nutrition for a selected recipe."
+          - id: "ingredient_substitutes"
+            name: "Ingredient substitutes"
+            description: "Find substitutes for an ingredient."
+          - id: "unit_conversion"
+            name: "Convert ingredient amounts"
+            description: "Convert ingredient measurements between units."
+          - id: "parse_ingredients"
+            name: "Parse ingredients"
+            description: "Parse free-text ingredient descriptions into structured data."
 
       agent_card_publishing:
         interval_seconds: 10

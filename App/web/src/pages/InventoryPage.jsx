@@ -1,324 +1,64 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { inventoryRestApi } from "@/api/inventoryRest";
+import React, { useState } from "react";
 import { useGateway } from "@/api";
+import { AGENTS } from "@/api/agents";
+import { useGatewaySession } from "@/hooks/useGatewaySession";
+import { useInventory } from "@/hooks/useInventory";
+import { useAssistantChat } from "@/hooks/useAssistantChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
-import { AssistantPanel } from "@/components/inventory/AssistantPanel";
-import {
-  appendExecutionLifecycleStep,
-  applyArtifactUpdateToTimeline,
-  applyStatusUpdateToTimeline,
-  createExecutionTimelineTracker,
-  getExecutionTimelineSnapshot,
-} from "@/lib/executionTimeline";
+import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 
-const gatewayStorage = {
+const STORAGE_KEYS = {
   gatewayUrl: "inventory_gateway_url",
   sessionId: "inventory_gateway_session_id",
   agentName: "inventory_gateway_agent_name",
 };
 
-function makeSessionId() {
-  if (window.crypto && typeof window.crypto.randomUUID === "function") {
-    return `web-session-${window.crypto.randomUUID()}`;
-  }
-  return `web-session-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 9)}`;
-}
-
-function responseToChatText(result) {
-  if (typeof result?.text === "string" && result.text.trim()) {
-    return result.text.trim();
-  }
-  if (result?.data && typeof result.data === "string") {
-    return result.data;
-  }
-  if (result?.data && typeof result.data === "object") {
-    return JSON.stringify(result.data, null, 2);
-  }
-  return "Done.";
-}
-
-function extractItems(result) {
-  if (!result) return [];
-  if (Array.isArray(result)) return result;
-  if (Array.isArray(result.rows)) return result.rows;
-  const { data, type } = result;
-  if (type === "json") {
-    if (Array.isArray(data)) return data;
-    if (data?.rows && Array.isArray(data.rows)) return data.rows;
-    if (data?.data && Array.isArray(data.data)) return data.data;
-  }
-  if (type === "table" && Array.isArray(data)) return data;
-  return [];
-}
-
 export default function InventoryPage() {
   const { client, api } = useGateway();
-  const [items, setItems] = useState([]);
-  const [sortDirection, setSortDirection] = useState("desc");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { persistSession } = useGatewaySession(
+    client,
+    STORAGE_KEYS,
+    AGENTS.INVENTORY
+  );
+
+  const inventory = useInventory(api, persistSession);
+  const chat = useAssistantChat(client, AGENTS.INVENTORY, {
+    welcomeText:
+      "Inventory chat ready. Ask me to add, update, delete, or explain your inventory.",
+    idPrefix: "inventory-chat",
+    errorLabel: "Inventory chat failed",
+    onComplete: () => inventory.fetchItems({ background: true }),
+  });
+
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
-  const [mutating, setMutating] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatInput, setChatInput] = useState("");
-  const [chatSending, setChatSending] = useState(false);
-  const [chatActiveTimeline, setChatActiveTimeline] = useState([]);
-  const [chatSessionId, setChatSessionId] = useState("");
-  const [chatMessages, setChatMessages] = useState([
-    {
-      id: "inventory-chat-welcome",
-      role: "assistant",
-      text: "Inventory chat ready. Ask me to add, update, delete, or explain your inventory.",
-    },
-  ]);
-  const fetchingRef = useRef(false);
-  const chatTimelineTrackerRef = useRef(null);
-
-  const persistSession = useCallback(() => {
-    const currentSessionId = client.getSessionId();
-    setChatSessionId(currentSessionId);
-    localStorage.setItem(gatewayStorage.sessionId, currentSessionId);
-    localStorage.setItem(gatewayStorage.agentName, "InventoryManager");
-  }, [client]);
-
-  const fetchItems = useCallback(async ({ background = false } = {}) => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
-    if (!background) {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      const result = await inventoryRestApi.list();
-      setItems(extractItems(result));
-      setLastSyncedAt(new Date());
-    } catch (err) {
-      const normalized = err instanceof Error ? err : new Error(String(err));
-      setError(normalized);
-    } finally {
-      fetchingRef.current = false;
-      if (!background) {
-        setLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const savedGatewayUrl =
-      localStorage.getItem(gatewayStorage.gatewayUrl) || "http://localhost:8000";
-    const savedSessionId =
-      localStorage.getItem(gatewayStorage.sessionId) || makeSessionId();
-
-    client.setGatewayUrl(savedGatewayUrl);
-    client.setSessionId(savedSessionId);
-    setChatSessionId(savedSessionId);
-    localStorage.setItem(gatewayStorage.gatewayUrl, savedGatewayUrl);
-    localStorage.setItem(gatewayStorage.sessionId, savedSessionId);
-    localStorage.setItem(gatewayStorage.agentName, "InventoryManager");
-  }, [client]);
-
-  useEffect(() => {
-    const className = "inventory-chat-open";
-    if (chatOpen) {
-      document.body.classList.add(className);
-    } else {
-      document.body.classList.remove(className);
-    }
-
-    return () => {
-      document.body.classList.remove(className);
-    };
-  }, [chatOpen]);
-
-  useEffect(() => {
-    void fetchItems();
-    const intervalId = window.setInterval(() => {
-      void fetchItems({ background: true });
-    }, 5000);
-    const onFocus = () => {
-      void fetchItems({ background: true });
-    };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchItems]);
 
   const handleAdd = async (description) => {
-    setMutating(true);
-    try {
-      await api.inventory.addItems(description);
-      persistSession();
-      toast.success("Items added successfully");
-      setAddOpen(false);
-      await fetchItems({ background: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error("Failed to add items", { description: message });
-    } finally {
-      setMutating(false);
-    }
+    const success = await inventory.handleAdd(description);
+    if (success) setAddOpen(false);
   };
 
   const handleIncrease = async (item, amount) => {
-    setMutating(true);
-    try {
-      const unit = item.quantity_unit || item.unit || "unit";
-      await api.inventory.increaseStock(item.product_name, amount, unit);
-      persistSession();
-      toast.success(`Increased ${item.product_name} stock`);
-      setEditItem(null);
-      await fetchItems({ background: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error("Failed to increase stock", { description: message });
-    } finally {
-      setMutating(false);
-    }
+    const success = await inventory.handleIncrease(item, amount);
+    if (success) setEditItem(null);
   };
 
   const handleDecrease = async (item, amount) => {
-    setMutating(true);
-    try {
-      const unit = item.quantity_unit || item.unit || "unit";
-      await api.inventory.decreaseStock(item.product_name, amount, unit);
-      persistSession();
-      toast.success(`Decreased ${item.product_name} stock`);
-      setEditItem(null);
-      await fetchItems({ background: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error("Failed to decrease stock", { description: message });
-    } finally {
-      setMutating(false);
-    }
+    const success = await inventory.handleDecrease(item, amount);
+    if (success) setEditItem(null);
   };
 
   const handleDelete = async (item) => {
-    setMutating(true);
-    try {
-      await api.inventory.deleteItem(item.product_name);
-      persistSession();
-      toast.success(`Deleted ${item.product_name}`);
-      setDeleteItem(null);
-      await fetchItems({ background: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error("Failed to delete item", { description: message });
-    } finally {
-      setMutating(false);
-    }
+    const success = await inventory.handleDelete(item);
+    if (success) setDeleteItem(null);
   };
-
-  const sendChat = useCallback(async () => {
-    const prompt = chatInput.trim();
-    if (!prompt || chatSending) return;
-
-    const tracker = createExecutionTimelineTracker();
-    chatTimelineTrackerRef.current = tracker;
-    appendExecutionLifecycleStep(tracker, {
-      status: "info",
-      title: "Task submitted",
-    });
-    setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
-
-    const userMessage = {
-      id: `chat-user-${Date.now()}`,
-      role: "user",
-      text: prompt,
-    };
-    setChatMessages((prev) => [...prev, userMessage]);
-    setChatInput("");
-    setChatSending(true);
-
-    try {
-      const result = await api.inventory.prompt(prompt, {
-        onStatus: (statusText, payload) => {
-          const changed = applyStatusUpdateToTimeline(tracker, statusText, payload);
-          if (changed) {
-            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
-          }
-        },
-        onArtifact: (payload) => {
-          const changed = applyArtifactUpdateToTimeline(tracker, payload);
-          if (changed) {
-            setChatActiveTimeline(getExecutionTimelineSnapshot(tracker));
-          }
-        },
-      });
-      persistSession();
-
-      appendExecutionLifecycleStep(tracker, {
-        status: "completed",
-        title: "Final response received",
-      });
-      const timeline = getExecutionTimelineSnapshot(tracker);
-
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `chat-assistant-${Date.now()}`,
-          role: "assistant",
-          text: responseToChatText(result),
-          timeline,
-        },
-      ]);
-      setChatActiveTimeline([]);
-      await fetchItems({ background: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      appendExecutionLifecycleStep(tracker, {
-        status: "error",
-        title: "Request failed",
-        detail: message,
-      });
-      const timeline = getExecutionTimelineSnapshot(tracker);
-
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `chat-assistant-error-${Date.now()}`,
-          role: "assistant",
-          text: `Request failed: ${message}`,
-          timeline,
-        },
-      ]);
-      setChatActiveTimeline([]);
-      toast.error("Inventory chat failed", { description: message });
-    } finally {
-      chatTimelineTrackerRef.current = null;
-      setChatSending(false);
-    }
-  }, [api, chatInput, chatSending, fetchItems, persistSession]);
-
-  const sortedItems = useMemo(() => {
-    const next = [...items];
-    next.sort((a, b) => {
-      const aTs = String(a?.updated_at || a?.created_at || "");
-      const bTs = String(b?.updated_at || b?.created_at || "");
-      if (aTs === bTs) return 0;
-      if (sortDirection === "desc") {
-        return aTs < bTs ? 1 : -1;
-      }
-      return aTs > bTs ? 1 : -1;
-    });
-    return next;
-  }, [items, sortDirection]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -330,18 +70,18 @@ export default function InventoryPage() {
               Manage your kitchen inventory items
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {lastSyncedAt
-                ? `Live backend sync: ${lastSyncedAt.toLocaleTimeString()}`
+              {inventory.lastSyncedAt
+                ? `Live backend sync: ${inventory.lastSyncedAt.toLocaleTimeString()}`
                 : "Live backend sync: pending"}
             </p>
           </div>
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => void fetchItems()}
-              disabled={loading}
+              onClick={() => void inventory.fetchItems()}
+              disabled={inventory.loading}
             >
-              {loading ? "Refreshing..." : "Refresh"}
+              {inventory.loading ? "Refreshing..." : "Refresh"}
             </Button>
             <Button
               variant="outline"
@@ -370,30 +110,28 @@ export default function InventoryPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {error && (
+          {inventory.error && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
               <p className="text-sm text-destructive">
-                Failed to load inventory: {error.message}
+                Failed to load inventory: {inventory.error.message}
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-2"
-                onClick={() => void fetchItems()}
+                onClick={() => void inventory.fetchItems()}
               >
                 Retry
               </Button>
             </div>
           )}
           <InventoryTable
-            items={sortedItems}
-            loading={loading}
+            items={inventory.items}
+            loading={inventory.loading}
             onEdit={setEditItem}
             onDelete={setDeleteItem}
-            sortDirection={sortDirection}
-            onToggleSort={() =>
-              setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"))
-            }
+            sortDirection={inventory.sortDirection}
+            onToggleSort={inventory.toggleSort}
           />
         </CardContent>
       </Card>
@@ -402,7 +140,7 @@ export default function InventoryPage() {
         open={addOpen}
         onOpenChange={setAddOpen}
         onSubmit={handleAdd}
-        loading={mutating}
+        loading={inventory.mutating}
       />
 
       <EditItemDialog
@@ -411,7 +149,7 @@ export default function InventoryPage() {
         onOpenChange={(open) => !open && setEditItem(null)}
         onIncrease={handleIncrease}
         onDecrease={handleDecrease}
-        loading={mutating}
+        loading={inventory.mutating}
       />
 
       <DeleteItemDialog
@@ -419,18 +157,20 @@ export default function InventoryPage() {
         open={!!deleteItem}
         onOpenChange={(open) => !open && setDeleteItem(null)}
         onConfirm={handleDelete}
-        loading={mutating}
+        loading={inventory.mutating}
       />
 
       <AssistantPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        messages={chatMessages}
-        activeTimeline={chatActiveTimeline}
-        input={chatInput}
-        onInputChange={setChatInput}
-        onSend={() => void sendChat()}
-        sending={chatSending}
+        title="Kitchen Assistant"
+        subtitle="I can help manage your inventory. Just ask!"
+        messages={chat.messages}
+        activeTimeline={chat.activeTimeline}
+        input={chat.input}
+        onInputChange={chat.setInput}
+        onSend={() => void chat.send()}
+        sending={chat.sending}
       />
     </div>
   );

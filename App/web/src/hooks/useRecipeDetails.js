@@ -23,16 +23,48 @@ export function useRecipeDetails(client, sessionKey) {
       setSelectedRecipe(recipe);
       setDetails(null);
       setError(null);
-      setLoading(true);
 
       try {
+        // If the recipe already has cached instructions + ingredients, use them directly
+        if (recipe.provider === "agent" && recipe.instructions && recipe.ingredients?.length > 0) {
+          setDetails({
+            title: recipe.title,
+            imageUrl: recipe.imageUrl || "",
+            ingredients: recipe.ingredients,
+            instructions: recipe.instructions,
+            sourceUrl: recipe.sourceUrl || "",
+            usedIngredients: recipe.usedIngredients || [],
+            missingIngredients: recipe.missingIngredients || [],
+            readyInMinutes: recipe.readyInMinutes || 0,
+            servings: recipe.servings || 0,
+            diets: recipe.diets || [],
+            cuisines: recipe.cuisines || [],
+            scores: recipe.scores || null,
+          });
+          return;
+        }
+
+        setLoading(true);
+
         if (recipe.provider === "agent") {
-          const response = await client.send(
-            `Provide full details for this recipe: "${recipe.title}". Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`,
-            AGENTS.RECIPE_RESEARCH
-          );
+          // If we have a Spoonacular numeric ID, ask for details by ID for reliability
+          const hasNumericId = recipe.id && /^\d+$/.test(String(recipe.id));
+          const prompt = hasNumericId
+            ? `Get the full recipe details for meal ID ${recipe.id} using get_meal_details. Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`
+            : `Provide full details for this recipe: "${recipe.title}". Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`;
+          const response = await client.send(prompt, AGENTS.RECIPE_RESEARCH);
           localStorage.setItem(sessionKey, client.getSessionId());
-          setDetails(normalizeAgentRecipeDetails(response.text, recipe));
+          const normalized = normalizeAgentRecipeDetails(response.text, recipe);
+          setDetails({
+            ...normalized,
+            usedIngredients: recipe.usedIngredients || [],
+            missingIngredients: recipe.missingIngredients || [],
+            readyInMinutes: recipe.readyInMinutes || 0,
+            servings: recipe.servings || 0,
+            diets: recipe.diets || [],
+            cuisines: recipe.cuisines || [],
+            scores: recipe.scores || null,
+          });
           return;
         }
 

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { responseToChatText } from "@/lib/parseResponse";
+import { responseToChatText, extractRecipeData } from "@/lib/parseResponse";
 import {
   appendExecutionLifecycleStep,
   applyArtifactUpdateToTimeline,
@@ -86,13 +86,17 @@ export function useAssistantChat(client, agentName, options = {}) {
       });
       const timeline = getExecutionTimelineSnapshot(tracker);
 
+      const rawText = responseToChatText(result);
+      const { recipes: recipeData, cleanText } = extractRecipeData(rawText);
+
       setMessages((prev) => [
         ...prev,
         {
           id: `${idPrefix}-assistant-${msgIdRef.current++}`,
           role: "assistant",
-          text: responseToChatText(result),
+          text: cleanText,
           timeline,
+          recipeData,
         },
       ]);
       setActiveTimeline([]);

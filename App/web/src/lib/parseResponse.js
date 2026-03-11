@@ -60,3 +60,33 @@ export function tryParseJSON(text) {
     return null;
   }
 }
+
+/**
+ * Extract a ```recipe_data JSON block from agent response text.
+ * Returns { recipes: Array | null, cleanText: string }.
+ */
+export function extractRecipeData(text) {
+  if (typeof text !== "string" || !text.trim()) {
+    return { recipes: null, cleanText: text || "" };
+  }
+
+  const match = text.match(/```recipe_data\s*\n?([\s\S]*?)\n?```/i);
+  if (!match) {
+    return { recipes: null, cleanText: text };
+  }
+
+  let recipes = null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      recipes = parsed;
+    }
+  } catch {
+    // invalid JSON in recipe_data block
+  }
+
+  // Remove the recipe_data block from the displayed text
+  const cleanText = text.replace(/```recipe_data\s*\n?[\s\S]*?\n?```/i, "").trim();
+
+  return { recipes, cleanText };
+}

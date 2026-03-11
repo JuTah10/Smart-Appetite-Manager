@@ -141,6 +141,18 @@ export function normalizeAgentRecipeList(responseText) {
           }
         : null;
 
+      // Extract full ingredients list (structured) if available
+      const rawIngredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+      const ingredients = rawIngredients
+        .map((item) => {
+          if (typeof item === "string") return item.trim();
+          if (!item || typeof item !== "object") return "";
+          const name = String(item.name || item.ingredient || "").trim();
+          const measure = String(item.measure || item.amount || "").trim();
+          return `${measure ? `${measure} ` : ""}${name}`.trim();
+        })
+        .filter(Boolean);
+
       return {
         id: String(recipe.id || recipe.recipe_id || `agent-recipe-${index}`),
         title,
@@ -155,9 +167,12 @@ export function normalizeAgentRecipeList(responseText) {
         usedIngredientCount: explicitUsedCount ?? usedIngredients.length,
         missingIngredientCount: explicitMissingCount ?? missingIngredients.length,
         readyInMinutes: numberOrNull(recipe.readyInMinutes) ?? numberOrNull(recipe.ready_in_minutes),
+        servings: numberOrNull(recipe.servings),
         diets: Array.isArray(recipe.diets) ? recipe.diets : [],
         cuisines: Array.isArray(recipe.cuisines) ? recipe.cuisines : [],
         scores,
+        ingredients,
+        instructions: typeof recipe.instructions === "string" ? recipe.instructions.trim() : "",
         sourceUrl: String(recipe.source_url || recipe.sourceUrl || "").trim(),
         provider: "agent",
       };

@@ -436,6 +436,7 @@ export default function RecipeDiscoveryPage() {
         sending={chat.sending}
         suggestions={QUICK_TAGS}
         onSuggestionClick={handleQuickSuggestion}
+        onViewRecipe={(recipe) => void recipeDetail.open({ ...recipe, provider: "agent" })}
       />
 
       <RecipeDetailsDialog

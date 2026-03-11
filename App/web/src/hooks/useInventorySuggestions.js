@@ -130,7 +130,7 @@ export function useInventorySuggestions(client) {
       setProgressTimeline(getExecutionTimelineSnapshot(tracker));
 
       const response = await client.send(
-        `Based on this inventory JSON, recommend the best 3 recipes. Return ONLY JSON array with fields: id, title, summary, used_ingredients (array), missing_ingredients (array), image_url, source_url.\nInventory: ${JSON.stringify(inventoryPayload)}`,
+        `Based on this inventory JSON, recommend the best 3 recipes with FULL details. For each recipe, first search for matches, then get the full details (ingredients and instructions) for each one. Return ONLY a JSON array where each recipe has: id, title, summary, image (full URL), source_url, sourceUrl, readyInMinutes, servings, diets (array), cuisines (array), usedIngredients (array of strings), missedIngredients (array of strings), usedIngredientCount, missedIngredientCount, ingredients (array of {name, measure}), instructions (full cooking instructions string), scores (object with final_score, pantry_coverage_score, prep_time_score, preference_match_score, missing_ingredient_count, explanation).\nInventory: ${JSON.stringify(inventoryPayload)}`,
         AGENTS.RECIPE_RESEARCH,
         {
           onStatus: (statusText, payload) => {

@@ -32,15 +32,33 @@ apps:
         2) Choose the right search tool:
            - If the user provides diet, cuisine, intolerances, or time constraints → use `complex_search`.
            - If the user only provides a simple ingredient list → use `get_top_3_meals`.
-        3) Present results sorted by `final_score` (highest first). For each recipe, show:
+        3) Present results sorted by `final_score` (highest first). For each recipe, ALWAYS show:
+           - The recipe image using markdown: ![Recipe Title](image_url)
            - Title, match score (as percentage), and the score explanation.
+           - Ready time, servings, diets, cuisines when available.
            - Used and missing ingredient counts.
         4) When the user chooses a recipe, use `get_meal_details` to fetch full instructions.
         5) If the user asks "can I swap X?" or about substitutes, use `get_substitutes`.
         6) If the user asks about unit conversions, use `convert_amounts`.
         7) If the user provides free-text ingredient descriptions, use `parse_ingredients` to structure them.
 
+        RESPONSE FORMAT — CRITICAL:
+        When presenting recipe search results, you MUST:
+        1) Show a human-readable summary with images (as described above).
+        2) At the very end of your response, append a machine-readable JSON block wrapped in
+           ```recipe_data ... ``` fences. This block must be a JSON array of recipe objects with
+           these fields: id, title, image (full URL), readyInMinutes, servings, sourceUrl,
+           usedIngredients (array of strings), missedIngredients (array of strings),
+           usedIngredientCount, missedIngredientCount, diets (array), cuisines (array),
+           scores (object with final_score, pantry_coverage_score, prep_time_score,
+           preference_match_score, missing_ingredient_count, explanation).
+        Use the EXACT values from the tool response. Example:
+        ```recipe_data
+        [{"id":"123","title":"Pasta","image":"https://...","scores":{"final_score":0.72,...},...}]
+        ```
+
         IMPORTANT:
+        - ALWAYS include the image for every recipe using ![title](url) markdown.
         - Always use EXACT data from tool responses — never fabricate recipes or scores.
         - Always present the score explanation to help users understand why a recipe ranked where it did.
         - If a search returns 0 results, the tool will automatically try fallback strategies.

@@ -4,6 +4,8 @@ import { ExecutionTimeline } from "@/components/progress/ExecutionTimeline";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { useResizableSidebar } from "@/lib/useResizableSidebar";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { RecipeCard } from "@/components/recipes/RecipeCard";
+import { normalizeAgentRecipeList } from "@/lib/mealdb";
 import {
   XIcon,
   SendIcon,
@@ -51,6 +53,7 @@ function AssistantAvatar({ size = "sm" }) {
  * @param {boolean} props.sending - Whether a message is being sent
  * @param {string[]} [props.suggestions] - Optional quick suggestion buttons
  * @param {(tag: string) => void} [props.onSuggestionClick] - Suggestion click handler
+ * @param {(recipe: object) => void} [props.onViewRecipe] - Handler when user clicks a recipe card
  */
 export function AssistantPanel({
   open,
@@ -65,6 +68,7 @@ export function AssistantPanel({
   sending,
   suggestions,
   onSuggestionClick,
+  onViewRecipe,
 }) {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -200,6 +204,19 @@ export function AssistantPanel({
                     defaultExpanded={false}
                     className="mt-2"
                   />
+                ) : null}
+                {message.role === "assistant" &&
+                Array.isArray(message.recipeData) &&
+                message.recipeData.length > 0 ? (
+                  <div className="mt-3 grid gap-3 grid-cols-1">
+                    {normalizeAgentRecipeList(JSON.stringify(message.recipeData)).map((recipe) => (
+                      <RecipeCard
+                        key={`chat-recipe-${recipe.id}`}
+                        recipe={recipe}
+                        onView={(r) => onViewRecipe?.(r)}
+                      />
+                    ))}
+                  </div>
                 ) : null}
               </div>
             </div>

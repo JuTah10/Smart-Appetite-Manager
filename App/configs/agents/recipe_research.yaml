@@ -55,7 +55,27 @@ apps:
         - If the user asks about unit conversions (e.g., "how many grams is 2 cups of flour?"),
           call peer_RecipeLookup and ask it to use `convert_amounts`.
 
+        RESPONSE FORMAT — CRITICAL:
+        When presenting recipe search results, you MUST:
+        1) Show a human-readable summary. For each recipe ALWAYS include:
+           - The recipe image using markdown: ![Recipe Title](image_url)
+           - Title, match score percentage, score explanation.
+           - Ready time, servings, diets, cuisines when available.
+           - Used and missing ingredient counts.
+        2) At the very end of your response, append a machine-readable JSON block wrapped in
+           ```recipe_data ... ``` fences. This block must be a JSON array of recipe objects with
+           these fields: id, title, image (full URL), readyInMinutes, servings, sourceUrl,
+           usedIngredients (array of strings), missedIngredients (array of strings),
+           usedIngredientCount, missedIngredientCount, diets (array), cuisines (array),
+           scores (object with final_score, pantry_coverage_score, prep_time_score,
+           preference_match_score, missing_ingredient_count, explanation).
+        Use the EXACT values from the tool/peer response. Example:
+        ```recipe_data
+        [{"id":"123","title":"Pasta","image":"https://...","scores":{"final_score":0.72,...},...}]
+        ```
+
         Rules:
+        - ALWAYS include the image for every recipe using ![title](url) markdown.
         - Always use EXACT data from tool responses — never fabricate ingredients or recipes.
         - If inventory is empty, tell the user and suggest adding items first.
         - Keep responses concise and well-formatted.

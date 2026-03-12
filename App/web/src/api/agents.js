@@ -18,6 +18,7 @@ export const AGENTS = {
   RECIPE: "RecipeLookup",
   SHOPPER: "ShopperAgent",
   RECIPE_RESEARCH: "RecipeResearchAgent",
+  ROUTE_PLANNER: "RoutePlannerAgent",
 };
 
 /**

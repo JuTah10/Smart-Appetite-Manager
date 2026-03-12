@@ -1,6 +1,19 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { StoreMap } from "@/components/shopping/StoreMap";
+
+function tryParseMapData(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.stores)) {
+      return parsed;
+    }
+  } catch {
+    // not valid JSON
+  }
+  return null;
+}
 
 function isImageHref(href) {
   if (!href || typeof href !== "string") return false;
@@ -25,6 +38,14 @@ export function MarkdownRenderer({ content, className = "" }) {
           ul: ({ children }) => <ul className="my-2 list-disc pl-5 space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="my-2 list-decimal pl-5 space-y-1">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
+          table: ({ children }) => (
+            <div className="my-2 overflow-x-auto rounded-md border">
+              <table className="w-full text-xs border-collapse">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+          th: ({ children }) => <th className="px-2 py-1.5 text-left font-semibold whitespace-nowrap border-b">{children}</th>,
+          td: ({ children }) => <td className="px-2 py-1.5 border-b whitespace-nowrap">{children}</td>,
           strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
           a: ({ href, children }) => {
             const showImagePreview = isImageHref(href);
@@ -49,11 +70,27 @@ export function MarkdownRenderer({ content, className = "" }) {
               </span>
             );
           },
-          code: ({ inline, children }) =>
+          pre: ({ children }) => {
+            const codeChild = React.Children.toArray(children).find(
+              (c) => React.isValidElement(c) && c.props?.className
+            );
+            if (codeChild) {
+              const lang = codeChild.props.className || "";
+              if (lang.includes("language-shopper_map_data")) {
+                const raw = String(codeChild.props.children || "").trim();
+                const mapData = tryParseMapData(raw);
+                if (mapData && mapData.stores.length > 0) {
+                  return <StoreMap mapData={mapData} height="300px" className="my-3" />;
+                }
+              }
+            }
+            return <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[12px] my-2">{children}</pre>;
+          },
+          code: ({ inline, className, children }) =>
             inline ? (
               <code className="rounded bg-muted px-1 py-0.5 text-[12px]">{children}</code>
             ) : (
-              <code className="block overflow-x-auto rounded-md bg-muted p-2 text-[12px]">{children}</code>
+              <code className={className}>{children}</code>
             ),
           img: ({ src, alt }) => (
             <img

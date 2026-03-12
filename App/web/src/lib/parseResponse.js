@@ -90,3 +90,67 @@ export function extractRecipeData(text) {
 
   return { recipes, cleanText };
 }
+
+/**
+ * Extract a ```route_plan_data JSON block from agent response text.
+ * Returns { routeData: object | null, cleanText: string }.
+ */
+export function extractRoutePlanData(text) {
+  if (typeof text !== "string" || !text.trim()) {
+    return { routeData: null, cleanText: text || "" };
+  }
+
+  const match = text.match(/```route_plan_data\s*\n?([\s\S]*?)\n?```/i);
+  if (!match) {
+    return { routeData: null, cleanText: text };
+  }
+
+  let routeData = null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.top_routes)) {
+      routeData = parsed;
+    }
+  } catch {
+    // invalid JSON in route_plan_data block
+  }
+
+  const cleanText = routeData
+    ? text.replace(/```route_plan_data\s*\n?[\s\S]*?\n?```/i, "").trim()
+    : text;
+
+  return { routeData, cleanText };
+}
+
+/**
+ * Extract a ```shopper_map_data JSON block from agent response text.
+ * Returns { mapData: object | null, cleanText: string }.
+ */
+export function extractShopperMapData(text) {
+  if (typeof text !== "string" || !text.trim()) {
+    return { mapData: null, cleanText: text || "" };
+  }
+
+  const match = text.match(/```shopper_map_data\s*\n?([\s\S]*?)\n?```/i);
+  if (!match) {
+    return { mapData: null, cleanText: text };
+  }
+
+  let mapData = null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.stores)) {
+      mapData = parsed;
+    }
+  } catch {
+    // invalid JSON in shopper_map_data block
+  }
+
+  // Only strip the block from text when we successfully parsed map data.
+  // If parsing failed, leave the block so MarkdownRenderer can attempt to render it.
+  const cleanText = mapData
+    ? text.replace(/```shopper_map_data\s*\n?[\s\S]*?\n?```/i, "").trim()
+    : text;
+
+  return { mapData, cleanText };
+}

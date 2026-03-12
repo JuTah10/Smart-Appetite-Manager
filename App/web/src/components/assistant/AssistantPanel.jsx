@@ -6,6 +6,8 @@ import { useResizableSidebar } from "@/lib/useResizableSidebar";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { RecipeCard } from "@/components/recipes/RecipeCard";
 import { normalizeAgentRecipeList } from "@/lib/mealdb";
+import { StoreMap } from "@/components/shopping/StoreMap";
+import { RouteScoreCard } from "@/components/shopping/RouteScoreCard";
 import {
   XIcon,
   SendIcon,
@@ -176,7 +178,19 @@ export function AssistantPanel({
           ref={scrollRef}
           className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,250,243,0.55))]"
         >
-          {messages.map((message) => (
+          {messages.map((message) =>
+            message.role === "system" ? (
+              <div
+                key={message.id}
+                className="flex items-center gap-2 py-1"
+              >
+                <div className="flex-1 h-px bg-blue-200" />
+                <span className="text-[11px] text-blue-500 font-medium whitespace-nowrap">
+                  {message.text}
+                </span>
+                <div className="flex-1 h-px bg-blue-200" />
+              </div>
+            ) : (
             <div
               key={message.id}
               className={`flex gap-2 ${
@@ -214,6 +228,31 @@ export function AssistantPanel({
                         key={`chat-recipe-${recipe.id}`}
                         recipe={recipe}
                         onView={(r) => onViewRecipe?.(r)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {message.role === "assistant" &&
+                message.shopperMapData &&
+                Array.isArray(message.shopperMapData.stores) &&
+                message.shopperMapData.stores.length > 0 ? (
+                  <div className="mt-3">
+                    <StoreMap
+                      mapData={message.shopperMapData}
+                      height="260px"
+                    />
+                  </div>
+                ) : null}
+                {message.role === "assistant" &&
+                message.routePlanData &&
+                Array.isArray(message.routePlanData.top_routes) &&
+                message.routePlanData.top_routes.length > 0 ? (
+                  <div className="mt-3 grid gap-3 grid-cols-1">
+                    {message.routePlanData.top_routes.slice(0, 3).map((route) => (
+                      <RouteScoreCard
+                        key={`route-${route.rank}`}
+                        route={route}
+                        isBest={route.rank === 1}
                       />
                     ))}
                   </div>

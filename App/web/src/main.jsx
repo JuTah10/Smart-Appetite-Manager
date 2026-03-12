@@ -6,6 +6,7 @@ import "./index.css";
 
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const RecipeDiscoveryPage = lazy(() => import("./pages/RecipeDiscoveryPage"));
+const ShoppingPage = lazy(() => import("./pages/ShoppingPage"));
 
 function PageLoader() {
   return (
@@ -23,6 +24,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/" element={<InventoryPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/recipes" element={<RecipeDiscoveryPage />} />
+          <Route path="/shopping" element={<ShoppingPage />} />
         </Route>
       </Routes>
     </Suspense>

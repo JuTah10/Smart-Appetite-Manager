@@ -138,3 +138,16 @@
     margin-right: var(--inventory-assistant-width);
   }
 }
+
+@keyframes highlight-fade {
+  0% {
+    background-color: oklch(0.925 0.084 155);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight-fade {
+  animation: highlight-fade 4s ease-out forwards;
+}

@@ -16,7 +16,10 @@ export function useInventory(api, persistSession) {
   const [error, setError] = useState(null);
   const [mutating, setMutating] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [deleteProgress, setDeleteProgress] = useState(null);
+  const [newItemKeys, setNewItemKeys] = useState(new Set());
   const fetchingRef = useRef(false);
+  const newItemTimerRef = useRef(null);
 
   const fetchItems = useCallback(async ({ background = false } = {}) => {
     if (fetchingRef.current) return;
@@ -55,17 +58,45 @@ export function useInventory(api, persistSession) {
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
+      if (newItemTimerRef.current) clearTimeout(newItemTimerRef.current);
     };
   }, [fetchItems]);
+
+  const itemKey = useCallback(
+    (item) => `${item.product_name}::${item.quantity_unit || ""}::${item.unit || ""}`,
+    []
+  );
+
+  const highlightNewItems = useCallback(
+    (previousItems, currentItems) => {
+      const prevKeys = new Set(previousItems.map(itemKey));
+      const added = new Set();
+      for (const item of currentItems) {
+        const key = itemKey(item);
+        if (!prevKeys.has(key)) added.add(key);
+      }
+      if (added.size > 0) {
+        setNewItemKeys(added);
+        if (newItemTimerRef.current) clearTimeout(newItemTimerRef.current);
+        newItemTimerRef.current = setTimeout(() => setNewItemKeys(new Set()), 4000);
+      }
+    },
+    [itemKey]
+  );
 
   const handleAdd = useCallback(
     async (description) => {
       setMutating(true);
+      const snapshotBefore = [...items];
       try {
         await api.inventory.addItems(description);
         persistSession();
         toast.success("Items added successfully");
-        await fetchItems({ background: true });
+        const result = await inventoryRestApi.list();
+        const updated = extractItems(result);
+        setItems(updated);
+        setLastSyncedAt(new Date());
+        highlightNewItems(snapshotBefore, updated);
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -75,15 +106,16 @@ export function useInventory(api, persistSession) {
         setMutating(false);
       }
     },
-    [api, persistSession, fetchItems]
+    [api, persistSession, items, highlightNewItems]
   );
 
   const handleIncrease = useCallback(
     async (item, amount) => {
       setMutating(true);
       try {
-        const unit = item.quantity_unit || item.unit || "unit";
-        await api.inventory.increaseStock(item.product_name, amount, unit);
+        const quantityUnit = item.quantity_unit || item.unit || "unit";
+        const unit = item.unit || item.quantity_unit || "unit";
+        await api.inventory.increaseStock(item.product_name, amount, quantityUnit, unit);
         persistSession();
         toast.success(`Increased ${item.product_name} stock`);
         await fetchItems({ background: true });
@@ -103,8 +135,9 @@ export function useInventory(api, persistSession) {
     async (item, amount) => {
       setMutating(true);
       try {
-        const unit = item.quantity_unit || item.unit || "unit";
-        await api.inventory.decreaseStock(item.product_name, amount, unit);
+        const quantityUnit = item.quantity_unit || item.unit || "unit";
+        const unit = item.unit || item.quantity_unit || "unit";
+        await api.inventory.decreaseStock(item.product_name, amount, quantityUnit, unit);
         persistSession();
         toast.success(`Decreased ${item.product_name} stock`);
         await fetchItems({ background: true });
@@ -123,14 +156,26 @@ export function useInventory(api, persistSession) {
   const handleDelete = useCallback(
     async (item) => {
       setMutating(true);
+      setDeleteProgress({ phase: "deleting", message: "Sending delete request to backend..." });
       try {
-        await api.inventory.deleteItem(item.product_name);
+        const response = await api.inventory.deleteItem(item.product_name, item.quantity_unit, item.unit);
         persistSession();
-        toast.success(`Deleted ${item.product_name}`);
+        setDeleteProgress({
+          phase: "syncing",
+          message: "Item deleted. Refreshing inventory...",
+          backendResponse: response.text,
+        });
         await fetchItems({ background: true });
+        setDeleteProgress({
+          phase: "done",
+          message: `${item.product_name} has been removed from your inventory.`,
+          backendResponse: response.text,
+        });
+        toast.success(`Deleted ${item.product_name}`);
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        setDeleteProgress({ phase: "error", message });
         toast.error("Failed to delete item", { description: message });
         return false;
       } finally {
@@ -139,6 +184,10 @@ export function useInventory(api, persistSession) {
     },
     [api, persistSession, fetchItems]
   );
+
+  const clearDeleteProgress = useCallback(() => {
+    setDeleteProgress(null);
+  }, []);
 
   const sortedItems = useMemo(() => {
     const next = [...items];
@@ -171,5 +220,9 @@ export function useInventory(api, persistSession) {
     handleIncrease,
     handleDecrease,
     handleDelete,
+    deleteProgress,
+    clearDeleteProgress,
+    newItemKeys,
+    itemKey,
   };
 }

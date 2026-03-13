@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import "./index.css";
 
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const RecipeDiscoveryPage = lazy(() => import("./pages/RecipeDiscoveryPage"));
 const ShoppingPage = lazy(() => import("./pages/ShoppingPage"));
@@ -21,7 +22,7 @@ createRoot(document.getElementById("root")).render(
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<InventoryPage />} />
+          <Route path="/" element={<DashboardPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/recipes" element={<RecipeDiscoveryPage />} />
           <Route path="/shopping" element={<ShoppingPage />} />

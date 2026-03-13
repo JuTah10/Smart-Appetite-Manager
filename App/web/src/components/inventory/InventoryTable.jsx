@@ -25,6 +25,8 @@ export function InventoryTable({
   onDelete,
   sortDirection = "desc",
   onToggleSort,
+  newItemKeys = new Set(),
+  itemKey,
 }) {
   if (loading && items.length === 0) {
     return (
@@ -75,10 +77,19 @@ export function InventoryTable({
         <TableBody>
           {items.map((item, index) => {
             const key = item.id || `${item.product_name}-${index}`;
+            const isNew = itemKey && newItemKeys.size > 0 && newItemKeys.has(itemKey(item));
             return (
-              <TableRow key={key}>
+              <TableRow
+                key={key}
+                className={isNew ? "animate-highlight-fade bg-emerald-50" : ""}
+              >
                 <TableCell className="font-medium">
                   {item.product_name}
+                  {isNew && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      New
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   <Badge

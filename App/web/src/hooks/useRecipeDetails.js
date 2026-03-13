@@ -52,7 +52,7 @@ export function useRecipeDetails(client, sessionKey) {
           const prompt = hasNumericId
             ? `Get the full recipe details for meal ID ${recipe.id} using get_meal_details. Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`
             : `Provide full details for this recipe: "${recipe.title}". Return ONLY JSON with fields: title, ingredients (array of {name, measure}), instructions, image_url, source_url.`;
-          const response = await client.send(prompt, AGENTS.RECIPE_RESEARCH);
+          const response = await client.send(prompt, AGENTS.RECIPE_GENERAL_SEARCH);
           localStorage.setItem(sessionKey, client.getSessionId());
           const normalized = normalizeAgentRecipeDetails(response.text, recipe);
           setDetails({

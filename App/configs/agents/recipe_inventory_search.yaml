@@ -1,0 +1,144 @@
+log:
+  stdout_log_level: INFO
+
+!include ../shared_config.yaml
+
+apps:
+  - name: recipe-inventory-search_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE, sam/}
+      supports_streaming: true
+      agent_name: "RecipeInventorySearch"
+      display_name: "Recipe Inventory Search"
+      model: *planning_model
+      agent_init_function:
+        module: "rate_limit_init"
+        name: "setup_llm_rate_limit"
+        base_path: "src"
+        config:
+          wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
+
+      instruction: |
+        You are the Recipe Inventory Search agent. Your job is to find the best recipes
+        the user can cook based on their current pantry inventory.
+
+        WORKFLOW — follow these steps in order:
+
+        STEP 1 — GET INVENTORY:
+        - If the message contains an Inventory JSON payload, extract ingredient names from it.
+        - Otherwise, call `get_ingredient_names` to fetch the current pantry list.
+        - Do NOT dump the inventory list back to the user. Just use the names for searching.
+
+        STEP 2 — SEARCH RECIPES:
+        - If the user specified diet, cuisine, intolerances, or prep time → use `complex_search`.
+          complex_search already returns full recipe info (ingredients, instructions, diets, etc.)
+          so you do NOT need to call get_meal_details afterward.
+        - If no filters → use `get_top_3_meals`, then call `get_meal_details_bulk` with
+          the comma-separated IDs to fetch full details for all recipes in ONE call.
+
+        STEP 3 — RESPOND:
+        - Present results sorted by match score.
+        - ALWAYS include the ```recipe_data JSON block (see format below).
+
+        RULES:
+        - NEVER ask follow-up questions. NEVER ask about preferences. Just search immediately.
+        - Use EXACT data from tool responses — never fabricate recipes, scores, or ingredients.
+        - If search returns 0 results, retry with fewer ingredients (the 5 most common ones).
+
+        RESPONSE FORMAT:
+        Your response MUST contain two parts:
+
+        1) A conversational summary. For each recipe show:
+           - The recipe image: ![Recipe Title](image_url)
+           - Title, match score percentage, score explanation
+           - Used and missing ingredient counts
+           - Ready time, servings when available
+
+        2) At the very end, ALWAYS append a ```recipe_data JSON block.
+           Each recipe object MUST have:
+           id, title, image (full URL), summary, readyInMinutes, servings,
+           sourceUrl, source_url, diets (array), cuisines (array),
+           usedIngredients (array of strings), missedIngredients (array of strings),
+           usedIngredientCount, missedIngredientCount,
+           ingredients (array of {name, measure}),
+           instructions (full cooking instructions string),
+           scores (object with final_score, pantry_coverage_score, prep_time_score,
+           preference_match_score, missing_ingredient_count, explanation).
+
+        Example:
+        ```recipe_data
+        [{"id":"52772","title":"Teriyaki Chicken","image":"https://www.themealdb.com/images/media/meals/wvpsxx1468256321.jpg","summary":"3 pantry ingredients","usedIngredients":["chicken","soy sauce","rice"],"missedIngredients":["honey","garlic"],"usedIngredientCount":3,"missedIngredientCount":2,"ingredients":[{"name":"chicken breast","measure":"2"}],"instructions":"Step 1: ...","scores":{"final_score":0.72,"pantry_coverage_score":0.6,"prep_time_score":0.8,"preference_match_score":0.7,"missing_ingredient_count":2,"explanation":"Good pantry match."}}]
+        ```
+
+        The ```recipe_data block is REQUIRED. Without it the frontend cannot display recipe cards.
+
+      tools:
+        # Inventory tool
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "get_ingredient_names"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+
+        # Recipe search tools
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "complex_search"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "get_top_3_meals"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "search_meals"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "get_meal_details_bulk"
+
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "get_meal_details"
+
+      session_service:
+        type: ${PERSISTENCE_TYPE, memory}
+        database_url: ${CUSTOM_AGENT_DATABASE_URL,}
+
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: >
+          Recipe Inventory Search — Finds the best recipes the user can cook with their
+          current pantry inventory. Fetches ingredient list, searches for matching recipes,
+          and returns scored results with full details. Use this agent for inventory-based
+          recipe searches like "what can I cook with what I have" or when given an inventory
+          JSON payload.
+        defaultInputModes: ["text"]
+        defaultOutputModes: ["text"]
+        skills:
+          - id: "inventory_recipe_search"
+            name: "Inventory Recipe Search"
+            description: "Search for recipes based on current pantry inventory."
+
+      agent_card_publishing:
+        interval_seconds: 10
+
+      agent_discovery:
+        enabled: true
+
+      inter_agent_communication:
+        allow_list: ["OrchestratorAgent", "RecipeAssistant"]
+        request_timeout_seconds: 120

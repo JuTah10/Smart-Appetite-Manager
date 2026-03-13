@@ -223,7 +223,12 @@ export function AssistantPanel({
                 Array.isArray(message.recipeData) &&
                 message.recipeData.length > 0 ? (
                   <div className="mt-3 grid gap-3 grid-cols-1">
-                    {normalizeAgentRecipeList(JSON.stringify(message.recipeData)).map((recipe) => (
+                    {/* recipeData may already be normalized objects (from auto-detect)
+                        or raw objects from recipe_data blocks — normalize to be safe */}
+                    {(message.recipeData[0]?.provider
+                      ? message.recipeData
+                      : normalizeAgentRecipeList(JSON.stringify(message.recipeData))
+                    ).map((recipe) => (
                       <RecipeCard
                         key={`chat-recipe-${recipe.id}`}
                         recipe={recipe}

@@ -6,11 +6,18 @@ import { useInventory } from "@/hooks/useInventory";
 import { useAssistantChat } from "@/hooks/useAssistantChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
+import {
+  MessageCircleIcon,
+  RefreshCwIcon,
+  PlusIcon,
+  PackageIcon,
+} from "lucide-react";
 
 const STORAGE_KEYS = {
   gatewayUrl: "inventory_gateway_url",
@@ -57,84 +64,114 @@ export default function InventoryPage() {
 
   const handleDelete = async (item) => {
     const success = await inventory.handleDelete(item);
-    if (success) setDeleteItem(null);
+    if (success) {
+      setDeleteItem(null);
+      inventory.clearDeleteProgress();
+    }
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle className="text-2xl font-bold">Inventory</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage your kitchen inventory items
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {inventory.lastSyncedAt
-                ? `Live backend sync: ${inventory.lastSyncedAt.toLocaleTimeString()}`
-                : "Live backend sync: pending"}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void inventory.fetchItems()}
-              disabled={inventory.loading}
-            >
-              {inventory.loading ? "Refreshing..." : "Refresh"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setChatOpen(true)}
-              className="gap-1.5"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-4 h-4"
-              >
-                <path d="M12 6c-1.7 0-3 1.1-3 2.5S10.3 11 12 11s3-1.1 3-2.5S13.7 6 12 6z" />
-                <path d="M17 3.3C15.5 2.5 13.8 2 12 2s-3.5.5-5 1.3" />
-                <path d="M2 16.5c0-2 2-3.5 4.5-4.3" />
-                <path d="M17.5 12.2c2.5.8 4.5 2.3 4.5 4.3" />
-                <path d="M4.5 21a9.9 9.9 0 0 1 15 0" />
-              </svg>
-              Ask Assistant
-            </Button>
-            <Button onClick={() => setAddOpen(true)}>Add Items</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {inventory.error && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
-              <p className="text-sm text-destructive">
-                Failed to load inventory: {inventory.error.message}
-              </p>
+    <div className="min-h-[calc(100vh-3.5rem)] bg-[radial-gradient(circle_at_top_left,_rgba(220,252,231,0.95),_#fff_48%),linear-gradient(135deg,_rgba(236,253,245,0.9),_rgba(255,255,255,1))]">
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+        {/* Hero header */}
+        <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-green-50 to-white">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="space-y-3 max-w-2xl">
+                <Badge className="bg-emerald-500 text-white hover:bg-emerald-500">
+                  <PackageIcon className="w-3 h-3 mr-1" />
+                  Kitchen Inventory
+                </Badge>
+                <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">
+                  Manage your kitchen inventory
+                </h1>
+                <p className="text-sm md:text-base text-muted-foreground">
+                  Track what you have, add new items, and let the assistant help
+                  you stay organized.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {inventory.lastSyncedAt
+                    ? `Live backend sync: ${inventory.lastSyncedAt.toLocaleTimeString()}`
+                    : "Live backend sync: pending"}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={() => void inventory.fetchItems()}
+                  disabled={inventory.loading}
+                  className="gap-1.5"
+                >
+                  <RefreshCwIcon
+                    className={`w-3.5 h-3.5 ${inventory.loading ? "animate-spin" : ""}`}
+                  />
+                  {inventory.loading ? "Refreshing..." : "Refresh"}
+                </Button>
+                <Button onClick={() => setAddOpen(true)} className="gap-1.5">
+                  <PlusIcon className="w-4 h-4" />
+                  Add Items
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Inventory table */}
+        <Card className="border-emerald-100">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-xl">Items</CardTitle>
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2"
-                onClick={() => void inventory.fetchItems()}
+                onClick={() => setChatOpen(true)}
+                className="gap-1.5"
               >
-                Retry
+                <MessageCircleIcon className="w-3.5 h-3.5" />
+                Ask Assistant
               </Button>
             </div>
-          )}
-          <InventoryTable
-            items={inventory.items}
-            loading={inventory.loading}
-            onEdit={setEditItem}
-            onDelete={setDeleteItem}
-            sortDirection={inventory.sortDirection}
-            onToggleSort={inventory.toggleSort}
-          />
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {inventory.error && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
+                <p className="text-sm text-destructive">
+                  Failed to load inventory: {inventory.error.message}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => void inventory.fetchItems()}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+            <InventoryTable
+              items={inventory.items}
+              loading={inventory.loading}
+              onEdit={setEditItem}
+              onDelete={setDeleteItem}
+              sortDirection={inventory.sortDirection}
+              onToggleSort={inventory.toggleSort}
+              newItemKeys={inventory.newItemKeys}
+              itemKey={inventory.itemKey}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Chat FAB */}
+      {!chatOpen && (
+        <Button
+          className="fixed bottom-6 right-6 z-40 rounded-full shadow-xl h-12 px-4"
+          onClick={() => setChatOpen(true)}
+        >
+          <MessageCircleIcon className="w-5 h-5 mr-1.5" />
+          Chat
+        </Button>
+      )}
 
       <AddItemDialog
         open={addOpen}
@@ -155,9 +192,15 @@ export default function InventoryPage() {
       <DeleteItemDialog
         item={deleteItem}
         open={!!deleteItem}
-        onOpenChange={(open) => !open && setDeleteItem(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteItem(null);
+            inventory.clearDeleteProgress();
+          }
+        }}
         onConfirm={handleDelete}
         loading={inventory.mutating}
+        deleteProgress={inventory.deleteProgress}
       />
 
       <AssistantPanel

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { responseToChatText, extractRecipeData, extractShopperMapData, extractRoutePlanData } from "@/lib/parseResponse";
+import { normalizeAgentRecipeList } from "@/lib/mealdb";
 import {
   appendExecutionLifecycleStep,
   applyArtifactUpdateToTimeline,
@@ -65,7 +66,8 @@ export function useAssistantChat(client, agentName, options = {}) {
     setSending(true);
 
     try {
-      const result = await client.send(prompt, agentName, {
+      const wirePrompt = prompt;
+      const result = await client.send(wirePrompt, agentName, {
         onStatus: (statusText, payload) => {
           const changed = applyStatusUpdateToTimeline(tracker, statusText, payload);
           if (changed) {
@@ -87,9 +89,19 @@ export function useAssistantChat(client, agentName, options = {}) {
       const timeline = getExecutionTimelineSnapshot(tracker);
 
       const rawText = responseToChatText(result);
-      const { recipes: recipeData, cleanText: afterRecipe } = extractRecipeData(rawText);
+      const { recipes: explicitRecipeData, cleanText: afterRecipe } = extractRecipeData(rawText);
       const { mapData: shopperMapData, cleanText: afterMap } = extractShopperMapData(afterRecipe);
       const { routeData: routePlanData, cleanText } = extractRoutePlanData(afterMap);
+
+      // Auto-detect recipe data: use explicit recipe_data block first,
+      // then fall back to parsing the full response for any JSON recipe arrays
+      let recipeData = explicitRecipeData;
+      if (!recipeData || !recipeData.length) {
+        const detected = normalizeAgentRecipeList(rawText);
+        if (detected.length > 0) {
+          recipeData = detected;
+        }
+      }
 
       setMessages((prev) => [
         ...prev,

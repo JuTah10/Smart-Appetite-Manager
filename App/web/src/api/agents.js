@@ -13,11 +13,13 @@
 
 // Agent name constants
 export const AGENTS = {
-  INVENTORY: "InventoryManager",
+  INVENTORY: "InventoryOrchestrator",
   ORCHESTRATOR: "OrchestratorAgent",
-  RECIPE: "RecipeLookup",
+  RECIPE: "RecipeAssistant",
   SHOPPER: "ShopperAgent",
-  RECIPE_RESEARCH: "RecipeResearchAgent",
+  RECIPE_RESEARCH: "RecipeAssistant",
+  RECIPE_INVENTORY_SEARCH: "RecipeInventorySearch",
+  RECIPE_GENERAL_SEARCH: "RecipeGeneralSearch",
   ROUTE_PLANNER: "RoutePlannerAgent",
 };
 
@@ -134,7 +136,7 @@ export function createAgentAPI(client) {
     async addItems(description, options = {}) {
       return query(
         AGENTS.INVENTORY,
-        `Add the following items to inventory: ${description}. After adding, return the updated list of all inventory items as a JSON array with fields: product_name, quantity, quantity_unit, unit. Only respond with the JSON.`,
+        `Add the following items to inventory: ${description}. I confirm — please proceed without asking for confirmation. After adding, return the result as JSON. Only respond with the JSON.`,
         options
       );
     },
@@ -145,10 +147,10 @@ export function createAgentAPI(client) {
      * @param {number} amount
      * @param {string} unit - e.g. "kg", "L", "unit"
      */
-    async increaseStock(productName, amount, unit, options = {}) {
+    async increaseStock(productName, amount, quantityUnit, unit, options = {}) {
       return query(
         AGENTS.INVENTORY,
-        `Increase the stock of "${productName}" by ${amount} ${unit}. After updating, return the updated item as JSON with fields: product_name, quantity, quantity_unit, unit. Only respond with the JSON.`,
+        `Increase the stock of "${productName}" (quantity_unit: ${quantityUnit}, unit: ${unit}) by ${amount}. I confirm — please proceed without asking for confirmation. After updating, return the result as JSON. Only respond with the JSON.`,
         options
       );
     },
@@ -159,10 +161,10 @@ export function createAgentAPI(client) {
      * @param {number} amount
      * @param {string} unit - e.g. "kg", "L", "unit"
      */
-    async decreaseStock(productName, amount, unit, options = {}) {
+    async decreaseStock(productName, amount, quantityUnit, unit, options = {}) {
       return query(
         AGENTS.INVENTORY,
-        `Decrease the stock of "${productName}" by ${amount} ${unit}. After updating, return the updated item as JSON with fields: product_name, quantity, quantity_unit, unit. Only respond with the JSON.`,
+        `Decrease the stock of "${productName}" (quantity_unit: ${quantityUnit}, unit: ${unit}) by ${amount}. I confirm — please proceed without asking for confirmation. After updating, return the result as JSON. Only respond with the JSON.`,
         options
       );
     },
@@ -171,10 +173,10 @@ export function createAgentAPI(client) {
      * Delete an item from inventory entirely.
      * @param {string} productName
      */
-    async deleteItem(productName, options = {}) {
+    async deleteItem(productName, quantityUnit, unit, options = {}) {
       return query(
         AGENTS.INVENTORY,
-        `Delete the item "${productName}" completely from the inventory. Remove the entire row. After deleting, return a JSON response: {"status": "success", "deleted": "${productName}"}. Only respond with the JSON.`,
+        `Delete the item "${productName}" (quantity_unit: ${quantityUnit || "any"}, unit: ${unit || "any"}) completely from the inventory. I confirm — please proceed without asking for confirmation. After deleting, return the result as JSON. Only respond with the JSON.`,
         options
       );
     },

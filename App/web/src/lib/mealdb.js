@@ -3,7 +3,7 @@
  * Extracted from RecipeDiscoveryPage for reuse and testability.
  */
 
-import { tryParseJSON } from "./parseResponse";
+import { tryParseJSON, extractRecipeData } from "./parseResponse";
 
 const MEALDB_BASE_URL = "https://www.themealdb.com/api/json/v1/1";
 export const BEST_CACHE_KEY = "recipe_best_inventory_cache_v1";
@@ -85,7 +85,11 @@ function numberOrNull(value) {
 }
 
 export function normalizeAgentRecipeList(responseText) {
-  const parsed = tryParseJSON(responseText);
+  // First try extracting from ```recipe_data fenced blocks (agent FRONTEND MODE)
+  const { recipes: recipeDataBlock } = extractRecipeData(responseText);
+
+  // Then try generic JSON parsing (```json or raw JSON)
+  const parsed = recipeDataBlock ?? tryParseJSON(responseText);
   const list = Array.isArray(parsed)
     ? parsed
     : Array.isArray(parsed?.recipes)

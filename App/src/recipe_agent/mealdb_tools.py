@@ -212,6 +212,16 @@ def _normalize_recipe(raw: Dict, scores: Optional[Dict] = None) -> Dict[str, Any
             "measure": f"{ing.get('amount', '')} {ing.get('unit', '')}".strip(),
         }
 
+    # Extract full ingredient list from extendedIngredients (available when
+    # addRecipeInformation=true or from /information endpoint)
+    ext_ings = raw.get("extendedIngredients", [])
+    ingredients = [
+        {"ingredient": ing.get("name", ""), "measure": f"{ing.get('amount', '')} {ing.get('unit', '')}".strip()}
+        for ing in ext_ings
+    ] if ext_ings else []
+
+    instructions = (raw.get("instructions") or "").strip()
+
     return {
         "id": str(raw.get("id", "")),
         "title": raw.get("title", ""),
@@ -225,6 +235,8 @@ def _normalize_recipe(raw: Dict, scores: Optional[Dict] = None) -> Dict[str, Any
         "missedIngredientCount": raw.get("missedIngredientCount", len(missed_ings)),
         "diets": raw.get("diets", []),
         "cuisines": raw.get("cuisines", []),
+        "ingredients": ingredients,
+        "instructions": instructions,
         "scores": scores,
     }
 
@@ -400,6 +412,55 @@ async def search_meals(
         )
 
     return await get_top_3_meals(ingredient)
+
+
+async def get_meal_details_bulk(
+    meal_ids: str,
+    tool_context: Any = None,
+) -> Dict[str, Any]:
+    """
+    Fetch full details for multiple recipes in a single API call.
+    Pass meal_ids as a comma-separated string (e.g. "123,456,789").
+    """
+    if not meal_ids:
+        return {"status": "error", "message": "meal_ids is required (comma-separated IDs)"}
+
+    try:
+        api_key = _get_api_key()
+    except SpoonacularError as e:
+        return {"status": "error", "message": str(e)}
+
+    params = {"apiKey": api_key, "ids": meal_ids}
+    url = f"{SPOONACULAR_BASE}/recipes/informationBulk?{urllib.parse.urlencode(params)}"
+
+    try:
+        data = await _fetch_json(url)
+    except SpoonacularError as e:
+        return {"status": "error", "message": str(e)}
+
+    if not isinstance(data, list):
+        return {"status": "error", "message": "Unexpected response from informationBulk"}
+
+    meals = []
+    for meal in data:
+        ingredients = [
+            {"ingredient": ing.get("name"), "measure": f"{ing.get('amount')} {ing.get('unit')}"}
+            for ing in meal.get("extendedIngredients", [])
+        ]
+        meals.append({
+            "idMeal": str(meal.get("id")),
+            "name": meal.get("title"),
+            "image": meal.get("image", ""),
+            "instructions": (meal.get("instructions") or "").strip(),
+            "ingredients": ingredients,
+            "readyInMinutes": meal.get("readyInMinutes", 0),
+            "servings": meal.get("servings", 0),
+            "diets": meal.get("diets", []),
+            "cuisines": meal.get("cuisines", []),
+            "sourceUrl": meal.get("sourceUrl", ""),
+        })
+
+    return {"status": "success", "count": len(meals), "meals": meals}
 
 
 async def get_meal_details(

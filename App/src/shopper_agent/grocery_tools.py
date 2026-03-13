@@ -1,57 +1,15 @@
 import logging
 import httpx
-import os
-import sentry_sdk
-from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk import trace, set_tag
 from typing import Any, Dict, Optional, List
 
 
 log = logging.getLogger(__name__)
-
-# Initialize Sentry if DSN is present
-sentry_dsn = os.getenv("SENTRY_DSN")
-if sentry_dsn and sentry_dsn.startswith("https"):
-    try:
-        def filter_noise(event, hint):
-            if 'exception' not in event and event.get('level') in ['info', 'debug']:
-                return None
-            return event
-
-        sentry_logging = LoggingIntegration(
-            level=logging.INFO,
-            event_level=logging.ERROR
-        )
-
-        sentry_sdk.init(
-            dsn=sentry_dsn,
-            integrations=[sentry_logging],
-            traces_sample_rate=1.0,
-            profiles_sample_rate=1.0,
-            environment="hackathon-demo",
-            send_default_pii=True,
-            before_send=filter_noise
-        )
-        log.info("[ShopperTools] Sentry Initialized (Performance + Tagging Enabled).")
-    except Exception as e:
-        log.warning(f"[ShopperTools] Failed to initialize Sentry: {e}")
-else:
-    log.warning("[ShopperTools] Sentry DSN not found or invalid. Skipping initialization.")
 
 FLIPP_SEARCH_URL = "https://backflipp.wishabi.com/flipp/items/search"
 OVERPASS_API_URL = "https://overpass-api.de/api/interpreter"
 
 # In-memory cache for Overpass store lookups
 _overpass_cache: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-
-def safe_set_tag(key: str, value: Any):
-    """Safely sets a Sentry tag, ignoring errors if Sentry is not ready."""
-    try:
-        if sentry_sdk.Hub.current.client:
-            set_tag(key, value)
-    except Exception:
-        pass
-
 
 _NON_GROCERY_KEYWORDS = {
     "dog", "cat", "pet", "puppy", "kitten", "feline", "canine",
@@ -238,7 +196,6 @@ async def find_nearby_stores(
         return {name: [] for name in store_names}
 
 
-@trace
 async def check_local_flyers(
     item_name: str,
     location: str = "Ottawa, Ontario, Canada",
@@ -247,8 +204,6 @@ async def check_local_flyers(
     tool_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Search Flipp for current grocery flyer deals on an item near the user's postal code."""
-    safe_set_tag("search_item", item_name)
-    safe_set_tag("search_type", "flyer")
     log.info(f"[ShopperTools] Checking Flipp flyers for: {item_name}")
 
     postal_code = (tool_config.get("postal_code") if tool_config else None) or "K1A 0A6"
@@ -280,7 +235,6 @@ async def check_local_flyers(
         return {"status": "error", "message": str(e)}
 
 
-@trace
 async def find_best_deals_batch(
     items: List[str],
     location: str = "Ottawa, Ontario, Canada",
@@ -289,9 +243,6 @@ async def find_best_deals_batch(
 ) -> Dict[str, Any]:
     """Search Flipp for the best deals on a list of grocery items, returning results per item."""
     try:
-        safe_set_tag("batch_size", len(items))
-        safe_set_tag("search_type", "batch")
-
         postal_code = (tool_config.get("postal_code") if tool_config else None) or "K1A 0A6"
         locale = (tool_config.get("locale") if tool_config else None) or "en-us"
 
@@ -330,7 +281,6 @@ async def find_best_deals_batch(
         return {"status": "error", "message": f"Batch search failed: {str(e)}"}
 
 
-@trace
 async def find_deals_with_map(
     items: List[str],
     location: str = "Ottawa, Ontario, Canada",
@@ -343,9 +293,6 @@ async def find_deals_with_map(
     coordinates for rendering an interactive map on the frontend.
     """
     try:
-        safe_set_tag("batch_size", len(items))
-        safe_set_tag("search_type", "batch_map")
-
         postal_code = (tool_config.get("postal_code") if tool_config else None) or "K1A 0A6"
         locale = (tool_config.get("locale") if tool_config else None) or "en-us"
         map_center_lat = float(tool_config.get("map_center_lat", 45.4215)) if tool_config else 45.4215

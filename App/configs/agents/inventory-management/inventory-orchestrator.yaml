@@ -17,7 +17,7 @@ apps:
       display_name: "Inventory Orchestrator"
       supports_streaming: true
 
-      model: *parsing_model
+      model: *general_model
       agent_init_function:
         module: "rate_limit_init"
         name: "setup_llm_rate_limit"

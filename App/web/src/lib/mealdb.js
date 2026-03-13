@@ -280,6 +280,7 @@ export function toRecipeCard(meal, pantrySet = new Set()) {
     usedIngredientCount: usedIngredients.length,
     missingIngredientCount: missingIngredients.length,
     sourceUrl: meal.strSource || meal.strYoutube || "",
+    youtubeUrl: meal.strYoutube || "",
     provider: "mealdb",
   };
 }
@@ -295,6 +296,7 @@ export function toRecipeDetails(meal, fallbackRecipe) {
     ),
     sourceUrl:
       meal?.strSource || meal?.strYoutube || fallbackRecipe?.sourceUrl || "",
+    youtubeUrl: meal?.strYoutube || fallbackRecipe?.youtubeUrl || "",
   };
 }
 

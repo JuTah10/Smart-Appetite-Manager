@@ -2,9 +2,9 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChefHatIcon, UtensilsCrossedIcon, ClockIcon } from "lucide-react";
+import { ChefHatIcon, UtensilsCrossedIcon, ClockIcon, BookmarkIcon, BookmarkCheckIcon } from "lucide-react";
 
-export function RecipeCard({ recipe, onView }) {
+export function RecipeCard({ recipe, onView, onToggleSave, isSaved }) {
   const totalIngredients =
     recipe.usedIngredients.length + recipe.missingIngredients.length;
 
@@ -62,6 +62,24 @@ export function RecipeCard({ recipe, onView }) {
               {recipe.readyInMinutes}m
             </div>
           </div>
+        )}
+
+        {onToggleSave && (
+          <button
+            type="button"
+            className="absolute bottom-2.5 right-2.5 z-10 rounded-full p-1.5 backdrop-blur-sm bg-white/80 hover:bg-white text-gray-700 transition-colors shadow-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave(recipe);
+            }}
+            title={isSaved ? "Remove from saved" : "Save recipe"}
+          >
+            {isSaved ? (
+              <BookmarkCheckIcon className="w-4 h-4 text-orange-500" />
+            ) : (
+              <BookmarkIcon className="w-4 h-4" />
+            )}
+          </button>
         )}
 
         <div className="absolute bottom-0 left-0 right-0 p-3">

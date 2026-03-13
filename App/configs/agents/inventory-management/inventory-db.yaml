@@ -43,9 +43,6 @@ apps:
         - increase_inventory_stock: Increase stock for one existing item.
         - decrease_inventory_stock: Decrease stock for one existing item.
         - delete_inventory_item: Permanently remove one item.
-        - bulk_add_inventory_items: Insert multiple items at once. Expects an `items` parameter:
-          a list of objects, each with product_name, quantity, quantity_unit, unit, category (optional).
-          Auto-merges duplicates by increasing quantity. Use this for large batches.
         - bulk_delete_inventory_items: Delete multiple items at once. Expects an `items` parameter:
           a list of objects, each with at least product_name (and optionally quantity_unit, unit).
           Returns a summary of deleted, not found, and errored items.
@@ -103,12 +100,6 @@ apps:
           component_base_path: "src"
           component_module: "inventory_agent.inventory_manager_tools"
           function_name: "delete_inventory_item"
-          tool_config:
-            db_path: ${INVENTORY_MANAGER_DB_NAME}
-        - tool_type: python
-          component_base_path: "src"
-          component_module: "inventory_agent.inventory_manager_tools"
-          function_name: "bulk_add_inventory_items"
           tool_config:
             db_path: ${INVENTORY_MANAGER_DB_NAME}
         - tool_type: python
@@ -180,5 +171,5 @@ apps:
         enabled: true
 
       inter_agent_communication:
-        allow_list: ["InventoryOrchestrator", "RecipeResearchAgent", "RecipeResearchAgent"]
+        allow_list: ["InventoryOrchestrator", "RecipeResearchAgent"]
         request_timeout_seconds: 60

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { getCategoryStyle } from "@/lib/categoryConfig";
@@ -136,16 +135,9 @@ export function ShoppingListPanel({
                   </p>
                 </div>
 
-                <Badge
-                  className="text-[10px] shrink-0"
-                  style={{
-                    backgroundColor: catStyle.bg,
-                    color: catStyle.text,
-                    borderColor: catStyle.border,
-                  }}
-                >
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium shrink-0 ${catStyle}`}>
                   {item.category || "Other"}
-                </Badge>
+                </span>
 
                 <button
                   type="button"

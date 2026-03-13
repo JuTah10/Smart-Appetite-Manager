@@ -2,27 +2,17 @@ import logging
 import httpx
 import asyncio
 import math
-import os
-import sentry_sdk
-from sentry_sdk import trace, set_tag
 from itertools import combinations
 from typing import Any, Dict, List, Optional, Tuple
 
+from shopper_agent.grocery_tools import FLIPP_SEARCH_URL, _parse_flipp_items
+
 log = logging.getLogger(__name__)
 
-FLIPP_SEARCH_URL = "https://backflipp.wishabi.com/flipp/items/search"
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 
 # Shared geocode cache
 _geocode_cache: Dict[str, Optional[Dict[str, float]]] = {}
-
-# Default weights for the scoring algorithm
-DEFAULT_WEIGHTS = {
-    "price": 0.35,
-    "convenience": 0.25,
-    "coverage": 0.25,
-    "distance": 0.15,
-}
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -320,39 +310,6 @@ async def _geocode_store(
     return None
 
 
-def _parse_flipp_items(raw_items: list, limit: int = 10) -> List[Dict[str, Any]]:
-    """Parse raw Flipp API response items into a clean deal format."""
-    deals = []
-    for item in raw_items:
-        if len(deals) >= limit:
-            break
-
-        price = item.get("current_price")
-        post_price_text = item.get("post_price_text") or ""
-
-        if price is not None:
-            display_price = f"${price:.2f}"
-            if post_price_text:
-                display_price += f" {post_price_text}"
-        else:
-            display_price = "See flyer"
-
-        store = item.get("merchant_name") or item.get("merchant") or "Unknown Store"
-
-        deals.append({
-            "store": store,
-            "item": item.get("name") or item.get("description") or "Unknown Item",
-            "price": display_price,
-            "original_price": f"${item['original_price']:.2f}" if item.get("original_price") else None,
-            "sale_story": item.get("sale_story", ""),
-            "valid_from": item.get("valid_from", ""),
-            "valid_to": item.get("valid_to", ""),
-        })
-
-    return deals
-
-
-@trace
 async def plan_optimal_route(
     items: List[str],
     weight_price: float = 0.35,

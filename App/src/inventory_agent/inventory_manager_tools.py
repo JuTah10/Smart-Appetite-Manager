@@ -722,24 +722,6 @@ async def delete_inventory_item(
             pass
 
 
-async def bulk_add_inventory_items(
-    items: List[Dict[str, Any]],
-    tool_context: Optional[Any] = None,
-    tool_config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Bulk-add multiple inventory items at once.
-
-    Each item should include: product_name, quantity, quantity_unit, unit.
-    If an item already exists (same product_name + quantity_unit + unit),
-    quantity is increased instead of inserting a duplicate row.
-    This is identical to insert_inventory_items but named explicitly for bulk operations.
-    """
-    return await insert_inventory_items(
-        items=items, tool_context=tool_context, tool_config=tool_config
-    )
-
-
 async def bulk_delete_inventory_items(
     items: List[Dict[str, Any]],
     tool_context: Optional[Any] = None,

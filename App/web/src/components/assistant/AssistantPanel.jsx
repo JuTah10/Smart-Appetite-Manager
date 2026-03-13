@@ -193,20 +193,23 @@ export function AssistantPanel({
         {Array.isArray(suggestions) && suggestions.length > 0 && (
           <div className="px-4 py-2 border-b bg-background">
             <div className="flex flex-wrap gap-2">
-              {suggestions.map((tag) => (
-                <Button
-                  key={`chat-suggestion-${tag}`}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="bg-white"
-                  onClick={() => onSuggestionClick?.(tag)}
-                  disabled={sending}
-                >
-                  <SparklesIcon className="w-3.5 h-3.5" />
-                  {tag}
-                </Button>
-              ))}
+              {suggestions.map((tag) => {
+                const label = typeof tag === "object" ? tag.label : tag;
+                return (
+                  <Button
+                    key={`chat-suggestion-${label}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="bg-white"
+                    onClick={() => onSuggestionClick?.(tag)}
+                    disabled={sending}
+                  >
+                    <SparklesIcon className="w-3.5 h-3.5" />
+                    {label}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         )}

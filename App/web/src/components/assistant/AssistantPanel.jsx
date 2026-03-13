@@ -15,9 +15,44 @@ import {
   MicOffIcon,
   ChefHatIcon,
   SparklesIcon,
+  PackageIcon,
+  ShoppingCartIcon,
 } from "lucide-react";
 
-function AssistantAvatar({ size = "sm" }) {
+/** Pre-defined themes for each page context */
+export const PANEL_THEMES = {
+  inventory: {
+    icon: PackageIcon,
+    avatarGradient: "from-emerald-400 to-green-600",
+    headerBg: "from-emerald-50 to-green-50",
+    panelBg: "bg-[radial-gradient(circle_at_top,_rgba(236,253,245,0.95),_rgba(255,255,255,0.98)_45%),linear-gradient(180deg,_rgba(240,253,244,0.88),_rgba(255,255,255,1))]",
+    messagesBg: "bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(240,253,244,0.55))]",
+    bubbleBorder: "border-emerald-200/70",
+    resizeHighlight: "bg-emerald-300/30",
+  },
+  recipe: {
+    icon: ChefHatIcon,
+    avatarGradient: "from-amber-400 to-orange-500",
+    headerBg: "from-amber-50 to-orange-50",
+    panelBg: "bg-[radial-gradient(circle_at_top,_rgba(255,247,236,0.95),_rgba(255,255,255,0.98)_45%),linear-gradient(180deg,_rgba(255,250,244,0.88),_rgba(255,255,255,1))]",
+    messagesBg: "bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,250,243,0.55))]",
+    bubbleBorder: "border-amber-200/70",
+    resizeHighlight: "bg-amber-300/30",
+  },
+  shopping: {
+    icon: ShoppingCartIcon,
+    avatarGradient: "from-sky-400 to-blue-600",
+    headerBg: "from-sky-50 to-blue-50",
+    panelBg: "bg-[radial-gradient(circle_at_top,_rgba(224,242,254,0.95),_rgba(255,255,255,0.98)_45%),linear-gradient(180deg,_rgba(240,249,255,0.88),_rgba(255,255,255,1))]",
+    messagesBg: "bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(240,249,255,0.55))]",
+    bubbleBorder: "border-sky-200/70",
+    resizeHighlight: "bg-sky-300/30",
+  },
+};
+
+const DEFAULT_THEME = PANEL_THEMES.recipe;
+
+function AssistantAvatar({ size = "sm", theme = DEFAULT_THEME }) {
   const sizeClass =
     size === "lg"
       ? "w-16 h-16"
@@ -30,11 +65,12 @@ function AssistantAvatar({ size = "sm" }) {
       : size === "md"
         ? "w-5 h-5 text-white"
         : "w-4 h-4 text-white";
+  const Icon = theme.icon;
   return (
     <div
-      className={`${sizeClass} rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0 shadow-md`}
+      className={`${sizeClass} rounded-full bg-gradient-to-br ${theme.avatarGradient} flex items-center justify-center shrink-0 shadow-md`}
     >
-      <ChefHatIcon className={iconClass} />
+      <Icon className={iconClass} />
     </div>
   );
 }
@@ -56,6 +92,7 @@ function AssistantAvatar({ size = "sm" }) {
  * @param {string[]} [props.suggestions] - Optional quick suggestion buttons
  * @param {(tag: string) => void} [props.onSuggestionClick] - Suggestion click handler
  * @param {(recipe: object) => void} [props.onViewRecipe] - Handler when user clicks a recipe card
+ * @param {object} [props.theme] - Theme object from PANEL_THEMES (inventory | recipe | shopping)
  */
 export function AssistantPanel({
   open,
@@ -71,6 +108,7 @@ export function AssistantPanel({
   suggestions,
   onSuggestionClick,
   onViewRecipe,
+  theme = DEFAULT_THEME,
 }) {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -122,22 +160,22 @@ export function AssistantPanel({
 
       <div
         style={{ "--assistant-panel-width": `${panelWidth}px` }}
-        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[var(--assistant-panel-width)] border-l shadow-2xl flex flex-col transition-transform duration-300 ease-out bg-[radial-gradient(circle_at_top,_rgba(255,247,236,0.95),_rgba(255,255,255,0.98)_45%),linear-gradient(180deg,_rgba(255,250,244,0.88),_rgba(255,255,255,1))] ${
+        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[var(--assistant-panel-width)] border-l shadow-2xl flex flex-col transition-transform duration-300 ease-out ${theme.panelBg} ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <button
           type="button"
           className={`hidden sm:block absolute left-0 top-0 h-full w-2 -translate-x-1/2 cursor-col-resize ${
-            isResizing ? "bg-amber-300/30" : "bg-transparent"
+            isResizing ? theme.resizeHighlight : "bg-transparent"
           }`}
           onMouseDown={startResize}
           aria-label="Resize assistant panel"
         />
 
         {/* Header */}
-        <div className="flex h-14 items-center gap-3 px-4 border-b bg-gradient-to-r from-amber-50 to-orange-50">
-          <AssistantAvatar size="md" />
+        <div className={`flex h-14 items-center gap-3 px-4 border-b bg-gradient-to-r ${theme.headerBg}`}>
+          <AssistantAvatar size="md" theme={theme} />
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-foreground leading-tight">
               {title}
@@ -176,7 +214,7 @@ export function AssistantPanel({
         {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,250,243,0.55))]"
+          className={`flex-1 overflow-y-auto px-4 py-4 space-y-3 ${theme.messagesBg}`}
         >
           {messages.map((message) =>
             message.role === "system" ? (
@@ -197,12 +235,12 @@ export function AssistantPanel({
                 message.role === "user" ? "flex-row-reverse" : "flex-row"
               }`}
             >
-              {message.role === "assistant" && <AssistantAvatar />}
+              {message.role === "assistant" && <AssistantAvatar theme={theme} />}
               <div
                 className={`max-w-[84%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
                   message.role === "user"
                     ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-white/95 border border-amber-200/70 shadow-sm rounded-bl-md"
+                    : `bg-white/95 border ${theme.bubbleBorder} shadow-sm rounded-bl-md`
                 }`}
               >
                 {message.role === "assistant" ? (
@@ -268,8 +306,8 @@ export function AssistantPanel({
 
           {sending && (
             <div className="flex gap-2 items-end">
-              <AssistantAvatar />
-              <div className="bg-white/90 border border-amber-200/70 rounded-2xl rounded-bl-md px-3 py-2 max-w-[84%] w-full shadow-sm">
+              <AssistantAvatar theme={theme} />
+              <div className={`bg-white/90 border ${theme.bubbleBorder} rounded-2xl rounded-bl-md px-3 py-2 max-w-[84%] w-full shadow-sm`}>
                 {Array.isArray(activeTimeline) &&
                 activeTimeline.length > 0 ? (
                   <ExecutionTimeline

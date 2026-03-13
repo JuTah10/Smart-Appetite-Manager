@@ -21,8 +21,16 @@ if callable(load_dotenv):
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from src.inventory_agent.inventory_manager_tools import list_inventory_items
+from src.inventory_agent.inventory_manager_tools import (
+    list_inventory_items,
+    list_shopping_list_items,
+    insert_shopping_list_items,
+    toggle_shopping_list_item,
+    delete_shopping_list_item,
+    clear_checked_shopping_list_items,
+)
 from src.shopper_agent.grocery_tools import find_best_deals_batch
 
 log = logging.getLogger(__name__)
@@ -132,3 +140,50 @@ async def get_flyer_deals(
     result["item_count"] = len(product_names)
     result["inventory"] = inventory_info
     return result
+
+
+# ---------------------------------------------------------------------------
+# Shopping list endpoints
+# ---------------------------------------------------------------------------
+
+
+class ShoppingListItemInput(BaseModel):
+    product_name: str
+    quantity: float = 1
+    quantity_unit: str | None = None
+    unit: str | None = None
+    category: str | None = None
+
+
+class ShoppingListAddRequest(BaseModel):
+    items: list[ShoppingListItemInput]
+
+
+@app.get("/api/shopping-list/items")
+async def get_shopping_list_items(
+    limit: int = Query(default=200, ge=1, le=500),
+) -> Dict[str, Any]:
+    result = await list_shopping_list_items(limit=limit, tool_config=_tool_config())
+    return _ensure_read_payload(result)
+
+
+@app.post("/api/shopping-list/items")
+async def add_shopping_list_items(body: ShoppingListAddRequest) -> Dict[str, Any]:
+    items = [item.model_dump() for item in body.items]
+    result = await insert_shopping_list_items(items=items, tool_config=_tool_config())
+    return result
+
+
+@app.patch("/api/shopping-list/items/{item_id}/toggle")
+async def toggle_shopping_item(item_id: int) -> Dict[str, Any]:
+    return await toggle_shopping_list_item(item_id=item_id, tool_config=_tool_config())
+
+
+@app.delete("/api/shopping-list/items/{item_id}")
+async def remove_shopping_item(item_id: int) -> Dict[str, Any]:
+    return await delete_shopping_list_item(item_id=item_id, tool_config=_tool_config())
+
+
+@app.delete("/api/shopping-list/checked")
+async def clear_checked_items() -> Dict[str, Any]:
+    return await clear_checked_shopping_list_items(tool_config=_tool_config())

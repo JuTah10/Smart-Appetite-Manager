@@ -9,7 +9,7 @@ import { useRecipeDetails } from "@/hooks/useRecipeDetails";
 import { getRandomMeal, toRecipeCard } from "@/lib/mealdb";
 import { RecipeDetailsDialog } from "@/components/recipes/RecipeDetailsDialog";
 import { RecipeCard } from "@/components/recipes/RecipeCard";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
+import { AssistantPanel, PANEL_THEMES } from "@/components/assistant/AssistantPanel";
 import { ExecutionTimeline } from "@/components/progress/ExecutionTimeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -437,6 +437,7 @@ export default function RecipeDiscoveryPage() {
         suggestions={QUICK_TAGS}
         onSuggestionClick={handleQuickSuggestion}
         onViewRecipe={(recipe) => void recipeDetail.open({ ...recipe, provider: "agent" })}
+        theme={PANEL_THEMES.recipe}
       />
 
       <RecipeDetailsDialog

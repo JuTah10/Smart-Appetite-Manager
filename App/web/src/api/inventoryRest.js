@@ -71,6 +71,36 @@ export function createInventoryRestClient(baseUrl = DEFAULT_INVENTORY_API_URL) {
       const params = new URLSearchParams({ postal_code: postalCode, locale });
       return request(`/api/flyer/deals?${params}`, { method: "GET" });
     },
+
+    // Shopping list
+    async shoppingList(limit = 200) {
+      return request(`/api/shopping-list/items?limit=${encodeURIComponent(limit)}`, {
+        method: "GET",
+      });
+    },
+
+    async addShoppingListItems(items) {
+      return request("/api/shopping-list/items", {
+        method: "POST",
+        body: JSON.stringify({ items }),
+      });
+    },
+
+    async toggleShoppingListItem(itemId) {
+      return request(`/api/shopping-list/items/${encodeURIComponent(itemId)}/toggle`, {
+        method: "PATCH",
+      });
+    },
+
+    async deleteShoppingListItem(itemId) {
+      return request(`/api/shopping-list/items/${encodeURIComponent(itemId)}`, {
+        method: "DELETE",
+      });
+    },
+
+    async clearCheckedShoppingListItems() {
+      return request("/api/shopping-list/checked", { method: "DELETE" });
+    },
   };
 }
 

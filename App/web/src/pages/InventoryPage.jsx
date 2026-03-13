@@ -1,8 +1,10 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useGateway } from "@/api";
 import { AGENTS } from "@/api/agents";
 import { useGatewaySession } from "@/hooks/useGatewaySession";
 import { useInventory } from "@/hooks/useInventory";
+import { useShoppingList } from "@/hooks/useShoppingList";
 import { useAssistantChat } from "@/hooks/useAssistantChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
+import { ShoppingListPanel } from "@/components/inventory/ShoppingListPanel";
+import { AssistantPanel, PANEL_THEMES } from "@/components/assistant/AssistantPanel";
 import {
   MessageCircleIcon,
   RefreshCwIcon,
   PlusIcon,
   PackageIcon,
+  ListChecksIcon,
+  ShoppingCartIcon,
 } from "lucide-react";
 
 const STORAGE_KEYS = {
@@ -25,6 +30,7 @@ const STORAGE_KEYS = {
 };
 
 export default function InventoryPage() {
+  const navigate = useNavigate();
   const { client, api } = useGateway();
   const { persistSession } = useGatewaySession(
     client,
@@ -33,6 +39,7 @@ export default function InventoryPage() {
   );
 
   const inventory = useInventory(api, persistSession);
+  const shoppingList = useShoppingList();
   const chat = useAssistantChat(client, AGENTS.INVENTORY, {
     welcomeText:
       "Inventory chat ready. Ask me to add, update, delete, or explain your inventory.",
@@ -41,9 +48,18 @@ export default function InventoryPage() {
     onComplete: () => inventory.fetchItems({ background: true }),
   });
 
+  const [activeTab, setActiveTab] = useState("inventory");
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
+
+  const handleFindDeals = () => {
+    const unchecked = shoppingList.items.filter((it) => !it.checked);
+    if (unchecked.length === 0) return;
+    const names = unchecked.map((it) => it.product_name).join(", ");
+    const params = new URLSearchParams({ items: names });
+    navigate(`/shopping?${params}`);
+  };
 
   const handleAddViaChat = () => {
     setChatOpen(true);
@@ -84,8 +100,8 @@ export default function InventoryPage() {
                   Manage your kitchen inventory
                 </h1>
                 <p className="text-sm md:text-base text-muted-foreground">
-                  Track what you have, add new items, and let the assistant help
-                  you stay organized.
+                  Track what you have, manage your shopping list, and let the
+                  assistant help you stay organized.
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {inventory.lastSyncedAt
@@ -111,59 +127,129 @@ export default function InventoryPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Tabs */}
+            <div className="mt-5 flex items-center gap-2 border-b border-emerald-100 pb-3">
+              <button
+                onClick={() => setActiveTab("inventory")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === "inventory"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "text-muted-foreground hover:bg-emerald-50"
+                }`}
+              >
+                <PackageIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                Inventory
+              </button>
+              <button
+                onClick={() => setActiveTab("shopping-list")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === "shopping-list"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "text-muted-foreground hover:bg-emerald-50"
+                }`}
+              >
+                <ListChecksIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                Shopping List
+                {shoppingList.uncheckedCount > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
+                    {shoppingList.uncheckedCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </CardContent>
         </Card>
 
         {/* Inventory table */}
-        <Card className="border-emerald-100">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-xl">Items</CardTitle>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setChatOpen(true)}
-                  className="gap-1.5"
-                >
-                  <MessageCircleIcon className="w-3.5 h-3.5" />
-                  Ask Assistant
-                </Button>
+        {activeTab === "inventory" && (
+          <Card className="border-emerald-100">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-xl">Items</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChatOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <MessageCircleIcon className="w-3.5 h-3.5" />
+                    Ask Assistant
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {inventory.error && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
-                <p className="text-sm text-destructive">
-                  Failed to load inventory: {inventory.error.message}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => void inventory.fetchItems()}
-                >
-                  Retry
-                </Button>
+            </CardHeader>
+            <CardContent>
+              {inventory.error && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
+                  <p className="text-sm text-destructive">
+                    Failed to load inventory: {inventory.error.message}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => void inventory.fetchItems()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+              <InventoryTable
+                items={inventory.items}
+                loading={inventory.loading}
+                onEdit={setEditItem}
+                onDelete={setDeleteItem}
+                sortField={inventory.sortField}
+                sortDirection={inventory.sortDirection}
+                onToggleSort={inventory.toggleSort}
+                newItemKeys={inventory.newItemKeys}
+                itemKey={inventory.itemKey}
+                categoryFilter={inventory.categoryFilter}
+                onCategoryFilterChange={inventory.setCategoryFilter}
+                allItems={inventory.allItems}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Shopping List */}
+        {activeTab === "shopping-list" && (
+          <Card className="border-emerald-100">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-xl">Shopping List</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {shoppingList.uncheckedCount} remaining
+                  </Badge>
+                  {shoppingList.uncheckedCount > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleFindDeals}
+                      className="gap-1.5 bg-blue-500 hover:bg-blue-600"
+                    >
+                      <ShoppingCartIcon className="w-3.5 h-3.5" />
+                      Find Deals
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
-            <InventoryTable
-              items={inventory.items}
-              loading={inventory.loading}
-              onEdit={setEditItem}
-              onDelete={setDeleteItem}
-              sortField={inventory.sortField}
-              sortDirection={inventory.sortDirection}
-              onToggleSort={inventory.toggleSort}
-              newItemKeys={inventory.newItemKeys}
-              itemKey={inventory.itemKey}
-              categoryFilter={inventory.categoryFilter}
-              onCategoryFilterChange={inventory.setCategoryFilter}
-              allItems={inventory.allItems}
-            />
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <ShoppingListPanel
+                items={shoppingList.items}
+                loading={shoppingList.loading}
+                onToggle={shoppingList.toggleItem}
+                onDelete={shoppingList.deleteItem}
+                onAdd={shoppingList.addItems}
+                onClearChecked={shoppingList.clearChecked}
+                checkedCount={shoppingList.checkedCount}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Chat FAB */}
@@ -211,6 +297,7 @@ export default function InventoryPage() {
         onInputChange={chat.setInput}
         onSend={() => void chat.send()}
         sending={chat.sending}
+        theme={PANEL_THEMES.inventory}
       />
     </div>
   );

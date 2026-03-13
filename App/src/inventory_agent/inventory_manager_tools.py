@@ -73,6 +73,23 @@ def _ensure_inventory_schema(conn: sqlite3.Connection) -> None:
         cur.execute("ALTER TABLE inventory ADD COLUMN category TEXT DEFAULT 'Other'")
         cur.execute("UPDATE inventory SET category = 'Other' WHERE category IS NULL")
 
+    # Shopping list table
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shopping_list (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_name TEXT NOT NULL,
+          quantity REAL DEFAULT 1,
+          quantity_unit TEXT,
+          unit TEXT,
+          category TEXT DEFAULT 'Other',
+          checked INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
     conn.commit()
 
 
@@ -903,6 +920,258 @@ async def list_inventory_items(
     except Exception as e:
         log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
         return _error_response("read", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Shopping list tools
+# ---------------------------------------------------------------------------
+
+
+async def list_shopping_list_items(
+    limit: int = 200,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return all shopping list items."""
+    log_id = "[InventoryTools:list_shopping_list_items]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("read", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, product_name, quantity, quantity_unit, unit, category,
+                   checked, created_at, updated_at
+            FROM shopping_list
+            ORDER BY checked ASC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+        log.info(f"{log_id} Retrieved {len(rows)} shopping list rows")
+        return {"status": "success", "count": len(rows), "rows": rows}
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("read", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("read", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+async def insert_shopping_list_items(
+    items: List[Dict[str, Any]],
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Add items to the shopping list. Duplicates (same name+unit) increase quantity."""
+    log_id = "[InventoryTools:insert_shopping_list_items]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("insert", "Missing db_path in tool_config.")
+    if not items:
+        return _error_response("insert", "No items provided.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        inserted = 0
+        increased = 0
+        skipped = 0
+        skipped_details: List[str] = []
+
+        for idx, raw_item in enumerate(items):
+            normalized_item, normalize_error = _normalize_insert_item(raw_item)
+            if normalize_error:
+                skipped += 1
+                skipped_details.append(f"index={idx}: {normalize_error}")
+                continue
+
+            product_name = normalized_item["product_name"]
+            quantity = normalized_item["quantity"]
+            quantity_unit = normalized_item["quantity_unit"]
+            unit = normalized_item["unit"]
+            category = normalized_item.get("category")
+
+            # Check for existing item in shopping list
+            cur.execute(
+                """
+                SELECT id, quantity FROM shopping_list
+                WHERE lower(trim(product_name)) = lower(trim(?))
+                  AND COALESCE(lower(trim(quantity_unit)), '') = COALESCE(lower(trim(?)), '')
+                  AND COALESCE(lower(trim(unit)), '') = COALESCE(lower(trim(?)), '')
+                ORDER BY id DESC LIMIT 1
+                """,
+                (product_name, quantity_unit, unit),
+            )
+            existing = cur.fetchone()
+            if existing:
+                new_qty = _parse_quantity(existing["quantity"], 0.0) + quantity
+                cur.execute(
+                    """
+                    UPDATE shopping_list
+                    SET quantity = ?, category = COALESCE(?, category),
+                        checked = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (new_qty, category, existing["id"]),
+                )
+                increased += 1
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO shopping_list
+                        (product_name, quantity, quantity_unit, unit, category)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (product_name, quantity, quantity_unit, unit, category or "Other"),
+                )
+                inserted += 1
+
+        if inserted == 0 and increased == 0:
+            details = "; ".join(skipped_details[:8]) if skipped_details else "No valid items."
+            return _error_response("insert", f"No valid items to insert. {details}")
+
+        conn.commit()
+        log.info(f"{log_id} Inserted {inserted}, increased {increased}, skipped {skipped}")
+        return {
+            "status": "success",
+            "inserted": inserted,
+            "increased": increased,
+            "skipped": skipped,
+            "processed": len(items),
+        }
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("insert", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("insert", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+async def toggle_shopping_list_item(
+    item_id: int,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Toggle the checked state of a shopping list item."""
+    log_id = "[InventoryTools:toggle_shopping_list_item]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("update", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, checked FROM shopping_list WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        if not row:
+            return _error_response("update", f"Shopping list item id={item_id} not found.")
+        new_checked = 0 if row["checked"] else 1
+        cur.execute(
+            "UPDATE shopping_list SET checked = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_checked, item_id),
+        )
+        conn.commit()
+        log.info(f"{log_id} Toggled id={item_id} checked={new_checked}")
+        return {"status": "success", "id": item_id, "checked": new_checked}
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("update", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("update", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+async def delete_shopping_list_item(
+    item_id: int,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Remove a single item from the shopping list."""
+    log_id = "[InventoryTools:delete_shopping_list_item]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("delete", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM shopping_list WHERE id = ?", (item_id,))
+        if cur.rowcount == 0:
+            return _error_response("delete", f"Shopping list item id={item_id} not found.")
+        conn.commit()
+        log.info(f"{log_id} Deleted id={item_id}")
+        return {"status": "success", "deleted": 1, "id": item_id}
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("delete", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("delete", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+async def clear_checked_shopping_list_items(
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Remove all checked items from the shopping list."""
+    log_id = "[InventoryTools:clear_checked_shopping_list_items]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("delete", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM shopping_list WHERE checked = 1")
+        count = cur.rowcount
+        conn.commit()
+        log.info(f"{log_id} Cleared {count} checked items")
+        return {"status": "success", "deleted": count}
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("delete", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("delete", f"Unexpected error: {e}")
     finally:
         try:
             conn.close()

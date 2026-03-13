@@ -54,13 +54,12 @@ const STATS = [
 ];
 
 const WEEKLY_ACTIVITY = [
-  { day: "Mon", meals: 3 },
-  { day: "Tue", meals: 2 },
-  { day: "Wed", meals: 3 },
-  { day: "Thu", meals: 2 },
-  { day: "Fri", meals: 3 },
-  { day: "Sat", meals: 4 },
-  { day: "Sun", meals: 3 },
+  { week: "Feb 3", meals: 8 },
+  { week: "Feb 10", meals: 5 },
+  { week: "Feb 17", meals: 10 },
+  { week: "Feb 24", meals: 7 },
+  { week: "Mar 3", meals: 9 },
+  { week: "Mar 10", meals: 6 },
 ];
 
 const TOP_INGREDIENTS = [
@@ -90,7 +89,7 @@ function BarChart({ data }) {
   return (
     <div className="flex items-end gap-3 h-32">
       {data.map((d) => (
-        <div key={d.day} className="flex-1 flex flex-col items-center gap-1.5">
+        <div key={d.week} className="flex-1 flex flex-col items-center gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
             {d.meals}
           </span>
@@ -101,7 +100,7 @@ function BarChart({ data }) {
             />
           </div>
           <span className="text-xs font-medium text-muted-foreground">
-            {d.day}
+            {d.week}
           </span>
         </div>
       ))}
@@ -188,19 +187,19 @@ export default function DashboardPage() {
           {/* Weekly activity */}
           <Card className="border-amber-200/60">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Weekly Meals</CardTitle>
+              <CardTitle className="text-base">Cooking History</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Meals cooked per day
+                Meals cooked per week
               </p>
             </CardHeader>
             <CardContent>
               <BarChart data={WEEKLY_ACTIVITY} />
               <div className="flex justify-between mt-3 pt-3 border-t text-xs text-muted-foreground">
                 <span>
-                  Total: <span className="font-semibold text-foreground">20 meals</span>
+                  Total: <span className="font-semibold text-foreground">45 meals</span>
                 </span>
                 <span>
-                  Avg: <span className="font-semibold text-foreground">2.9/day</span>
+                  Avg: <span className="font-semibold text-foreground">7.5/week</span>
                 </span>
               </div>
             </CardContent>

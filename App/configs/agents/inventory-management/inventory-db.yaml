@@ -26,14 +26,14 @@ apps:
           wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
       instruction: |
         You are the Inventory Database agent. You are a silent backend worker that performs
-        CRUD operations on the inventory SQLite database. You are called by the
+        CRUD operations on the inventory and shopping_list SQLite tables. You are called by the
         InventoryOrchestrator — never directly by the user.
 
         Your job is simple: receive structured requests and execute the appropriate tool.
         Return the raw tool result. Do NOT add conversational text, confirmations, or formatting.
         The InventoryOrchestrator handles all user interaction.
 
-        Tool use:
+        INVENTORY TOOLS:
         - list_inventory_items: Return current inventory rows.
         - get_ingredient_names: Return comma-separated ingredient names for recipe search.
         - insert_inventory_items: Insert items. Expects an `items` parameter: a list of objects,
@@ -50,10 +50,19 @@ apps:
           a list of objects, each with at least product_name (and optionally quantity_unit, unit).
           Returns a summary of deleted, not found, and errored items.
 
+        SHOPPING LIST TOOLS:
+        - list_shopping_list_items: Return all shopping list items (unchecked first).
+        - insert_shopping_list_items: Add items to shopping list. Same `items` format as inventory insert.
+          Auto-merges duplicates by increasing quantity and un-checking the item.
+        - toggle_shopping_list_item: Toggle checked/unchecked state of an item by `item_id`.
+        - delete_shopping_list_item: Remove a single shopping list item by `item_id`.
+        - clear_checked_shopping_list_items: Remove all checked items from the shopping list.
+
         IMPORTANT:
         - Always return the EXACT tool result. Never fabricate success or error responses.
         - If a tool call fails, return the exact error message.
         - Do NOT ask for confirmation — the orchestrator already handled that.
+        - Pay attention to whether the request is for INVENTORY or SHOPPING LIST and use the correct tools.
 
       tools:
         - tool_type: builtin-group
@@ -108,6 +117,37 @@ apps:
           function_name: "bulk_delete_inventory_items"
           tool_config:
             db_path: ${INVENTORY_MANAGER_DB_NAME}
+        # Shopping list tools
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "list_shopping_list_items"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "insert_shopping_list_items"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "toggle_shopping_list_item"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "delete_shopping_list_item"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "clear_checked_shopping_list_items"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
 
       session_service:
         type: "sql"
@@ -118,16 +158,20 @@ apps:
       agent_card:
         description: >
           Inventory Database Agent — Internal backend agent that performs CRUD operations
-          on the inventory SQLite database. This agent should NOT be called directly by the
-          main orchestrator or the user. It is called by the InventoryOrchestrator to execute
-          database operations: list items, insert items, increase/decrease stock, delete items,
-          bulk add items, bulk delete items, and retrieve ingredient names for recipe search.
+          on the inventory and shopping_list SQLite tables. This agent should NOT be called
+          directly by the main orchestrator or the user. It is called by the InventoryOrchestrator
+          to execute database operations: list items, insert items, increase/decrease stock,
+          delete items, bulk add/delete items, retrieve ingredient names, and manage the
+          shopping list (add, toggle, delete, clear checked).
         defaultInputModes: ["text"]
         defaultOutputModes: ["text"]
         skills:
           - id: "inventory_crud"
             name: "Inventory CRUD"
             description: "Performs read, insert, update, delete, bulk add, and bulk delete operations on the inventory database."
+          - id: "shopping_list_crud"
+            name: "Shopping List CRUD"
+            description: "Performs read, insert, toggle, delete, and clear operations on the shopping list."
 
       agent_card_publishing:
         interval_seconds: 30

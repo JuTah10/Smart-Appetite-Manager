@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useGateway } from "@/api";
 import { AGENTS } from "@/api/agents";
 import { useGatewaySession } from "@/hooks/useGatewaySession";
@@ -9,7 +10,7 @@ import { StoreMap } from "@/components/shopping/StoreMap";
 import { StoreDealCard } from "@/components/shopping/StoreDealCard";
 import { RouteScoreCard } from "@/components/shopping/RouteScoreCard";
 import { WeeklyDealsGrid } from "@/components/shopping/WeeklyDealsGrid";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
+import { AssistantPanel, PANEL_THEMES } from "@/components/assistant/AssistantPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,12 +41,14 @@ const STORAGE_KEYS = {
 };
 
 export default function ShoppingPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { client } = useGateway();
   useGatewaySession(client, STORAGE_KEYS, AGENTS.SHOPPER);
 
   const [activeTab, setActiveTab] = useState("weekly");
   const [chatOpen, setChatOpen] = useState(false);
   const weeklyDeals = useWeeklyDeals();
+  const prefillApplied = useRef(false);
 
   // Single unified chat — smart-routes to ShopperAgent or RoutePlannerAgent
   const chat = useShoppingChat(client, {
@@ -53,6 +56,20 @@ export default function ShoppingPage() {
       "Smart Shopping Assistant ready! Ask me to find deals on specific items, or plan an optimal shopping route for your grocery list.",
     idPrefix: "shopping-chat",
   });
+
+  // Pre-fill chat from ?items= URL param (e.g. from Shopping List "Find Deals" button)
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    const itemsParam = searchParams.get("items");
+    if (itemsParam) {
+      prefillApplied.current = true;
+      chat.setInput(`Find deals on ${itemsParam}`);
+      setChatOpen(true);
+      setActiveTab("deals");
+      // Clean up the URL
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, chat]);
 
   const handleQuickSuggestion = useCallback(
     (tag) => {
@@ -446,6 +463,7 @@ export default function ShoppingPage() {
         sending={chat.sending}
         suggestions={QUICK_TAGS}
         onSuggestionClick={handleQuickSuggestion}
+        theme={PANEL_THEMES.shopping}
       />
     </div>
   );

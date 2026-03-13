@@ -11,6 +11,7 @@ import { extractItems } from "@/lib/parseResponse";
  */
 export function useInventory(api, persistSession) {
   const [items, setItems] = useState([]);
+  const [sortField, setSortField] = useState("updated_at");
   const [sortDirection, setSortDirection] = useState("desc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -192,19 +193,48 @@ export function useInventory(api, persistSession) {
   const sortedItems = useMemo(() => {
     const next = [...items];
     next.sort((a, b) => {
-      const aTs = String(a?.updated_at || a?.created_at || "");
-      const bTs = String(b?.updated_at || b?.created_at || "");
-      if (aTs === bTs) return 0;
-      if (sortDirection === "desc") {
-        return aTs < bTs ? 1 : -1;
+      let aVal, bVal;
+      switch (sortField) {
+        case "product_name":
+          aVal = (a.product_name || "").toLowerCase();
+          bVal = (b.product_name || "").toLowerCase();
+          break;
+        case "quantity":
+          aVal = Number(a.quantity) || 0;
+          bVal = Number(b.quantity) || 0;
+          break;
+        case "quantity_unit":
+          aVal = (a.quantity_unit || "").toLowerCase();
+          bVal = (b.quantity_unit || "").toLowerCase();
+          break;
+        case "unit":
+          aVal = (a.unit || "").toLowerCase();
+          bVal = (b.unit || "").toLowerCase();
+          break;
+        case "updated_at":
+        default:
+          aVal = String(a?.updated_at || a?.created_at || "");
+          bVal = String(b?.updated_at || b?.created_at || "");
+          break;
       }
-      return aTs > bTs ? 1 : -1;
+      if (aVal === bVal) return 0;
+      if (sortDirection === "desc") {
+        return aVal < bVal ? 1 : -1;
+      }
+      return aVal > bVal ? 1 : -1;
     });
     return next;
-  }, [items, sortDirection]);
+  }, [items, sortField, sortDirection]);
 
-  const toggleSort = useCallback(() => {
-    setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"));
+  const toggleSort = useCallback((field) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"));
+      } else {
+        setSortDirection(field === "updated_at" ? "desc" : "asc");
+      }
+      return field;
+    });
   }, []);
 
   return {
@@ -213,6 +243,7 @@ export function useInventory(api, persistSession) {
     error,
     mutating,
     lastSyncedAt,
+    sortField,
     sortDirection,
     toggleSort,
     fetchItems,

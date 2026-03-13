@@ -18,11 +18,27 @@ function formatUpdatedAt(value) {
   return parsed.toLocaleString();
 }
 
+function SortableHeader({ field, label, sortField, sortDirection, onToggleSort, className = "" }) {
+  const isActive = sortField === field;
+  return (
+    <button
+      type="button"
+      className={`font-medium text-left hover:underline cursor-pointer inline-flex items-center gap-1 ${className}`}
+      onClick={() => onToggleSort(field)}
+      title={`Sort by ${label}`}
+    >
+      {label}
+      {isActive ? (sortDirection === "desc" ? " ↓" : " ↑") : ""}
+    </button>
+  );
+}
+
 export function InventoryTable({
   items,
   loading,
   onEdit,
   onDelete,
+  sortField = "updated_at",
   sortDirection = "desc",
   onToggleSort,
   newItemKeys = new Set(),
@@ -57,19 +73,20 @@ export function InventoryTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[300px]">Product</TableHead>
-            <TableHead className="text-right">Quantity</TableHead>
-            <TableHead>Unit</TableHead>
-            <TableHead>Package</TableHead>
+            <TableHead className="w-[300px]">
+              <SortableHeader field="product_name" label="Product" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
+            </TableHead>
+            <TableHead className="text-right">
+              <SortableHeader field="quantity" label="Quantity" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} className="justify-end" />
+            </TableHead>
             <TableHead>
-              <button
-                type="button"
-                className="font-medium text-left hover:underline cursor-pointer"
-                onClick={onToggleSort}
-                title="Sort by last updated"
-              >
-                Last Updated {sortDirection === "desc" ? "↓" : "↑"}
-              </button>
+              <SortableHeader field="quantity_unit" label="Unit" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
+            </TableHead>
+            <TableHead>
+              <SortableHeader field="unit" label="Package" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
+            </TableHead>
+            <TableHead>
+              <SortableHeader field="updated_at" label="Last Updated" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
             </TableHead>
             <TableHead className="text-right w-[120px]">Actions</TableHead>
           </TableRow>

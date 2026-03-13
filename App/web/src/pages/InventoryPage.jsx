@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
-import { AddItemDialog } from "@/components/inventory/AddItemDialog";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
@@ -42,14 +41,13 @@ export default function InventoryPage() {
     onComplete: () => inventory.fetchItems({ background: true }),
   });
 
-  const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
 
-  const handleAdd = async (description) => {
-    const success = await inventory.handleAdd(description);
-    if (success) setAddOpen(false);
+  const handleAddViaChat = () => {
+    setChatOpen(true);
+    chat.setInput("Add to my inventory: ");
   };
 
   const handleIncrease = async (item, amount) => {
@@ -107,7 +105,7 @@ export default function InventoryPage() {
                   />
                   {inventory.loading ? "Refreshing..." : "Refresh"}
                 </Button>
-                <Button onClick={() => setAddOpen(true)} className="gap-1.5">
+                <Button onClick={handleAddViaChat} className="gap-1.5">
                   <PlusIcon className="w-4 h-4" />
                   Add Items
                 </Button>
@@ -153,6 +151,7 @@ export default function InventoryPage() {
               loading={inventory.loading}
               onEdit={setEditItem}
               onDelete={setDeleteItem}
+              sortField={inventory.sortField}
               sortDirection={inventory.sortDirection}
               onToggleSort={inventory.toggleSort}
               newItemKeys={inventory.newItemKeys}
@@ -172,13 +171,6 @@ export default function InventoryPage() {
           Chat
         </Button>
       )}
-
-      <AddItemDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onSubmit={handleAdd}
-        loading={inventory.mutating}
-      />
 
       <EditItemDialog
         item={editItem}

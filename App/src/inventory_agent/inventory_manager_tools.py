@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
+VALID_CATEGORIES = {
+    "Produce", "Dairy", "Meat", "Seafood", "Grains", "Beverages",
+    "Snacks", "Condiments", "Frozen", "Baking", "Canned", "Other",
+}
 
 _DEFAULT_DB_PATH = os.getenv("INVENTORY_MANAGER_DB_NAME", "inventory.db")
 
@@ -65,6 +69,9 @@ def _ensure_inventory_schema(conn: sqlite3.Connection) -> None:
             "UPDATE inventory SET updated_at = COALESCE(created_at, CURRENT_TIMESTAMP) "
             "WHERE updated_at IS NULL"
         )
+    if "category" not in existing_columns:
+        cur.execute("ALTER TABLE inventory ADD COLUMN category TEXT DEFAULT 'Other'")
+        cur.execute("UPDATE inventory SET category = 'Other' WHERE category IS NULL")
 
     conn.commit()
 
@@ -179,11 +186,17 @@ def _normalize_insert_item(item: Any) -> Tuple[Optional[Dict[str, Any]], Optiona
     if unit and not quantity_unit:
         quantity_unit = unit
 
+    category_raw = _normalize_text(
+        _first_non_empty(item, ["category", "cat", "type"])
+    )
+    category = category_raw if category_raw in VALID_CATEGORIES else None
+
     return {
         "product_name": product_name,
         "quantity": quantity,
         "quantity_unit": quantity_unit,
         "unit": unit,
+        "category": category,
     }, None
 
 
@@ -195,7 +208,7 @@ def _find_existing_inventory_row(
 ) -> Optional[sqlite3.Row]:
     cur.execute(
         """
-        SELECT id, product_name, quantity, quantity_unit, unit, created_at, updated_at
+        SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
         FROM inventory
         WHERE lower(trim(product_name)) = lower(trim(?))
           AND COALESCE(lower(trim(quantity_unit)), '') = COALESCE(lower(trim(?)), '')
@@ -242,7 +255,7 @@ def _find_existing_inventory_row_with_fallback(
 
     cur.execute(
         """
-        SELECT id, product_name, quantity, quantity_unit, unit, created_at, updated_at
+        SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
         FROM inventory
         WHERE lower(trim(product_name)) = lower(trim(?))
         ORDER BY id DESC
@@ -343,6 +356,7 @@ async def insert_inventory_items(
             quantity = normalized_item["quantity"]
             quantity_unit = normalized_item["quantity_unit"]
             unit = normalized_item["unit"]
+            category = normalized_item.get("category")
 
             existing = _find_existing_inventory_row(
                 cur=cur,
@@ -359,20 +373,21 @@ async def insert_inventory_items(
                     SET quantity = ?,
                         quantity_unit = COALESCE(?, quantity_unit),
                         unit = COALESCE(?, unit),
+                        category = COALESCE(?, category),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                     """,
-                    (new_quantity, quantity_unit, unit, existing["id"]),
+                    (new_quantity, quantity_unit, unit, category, existing["id"]),
                 )
                 increased += 1
                 continue
 
             cur.execute(
                 """
-                INSERT INTO inventory (product_name, quantity, quantity_unit, unit)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO inventory (product_name, quantity, quantity_unit, unit, category)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (product_name, quantity, quantity_unit, unit),
+                (product_name, quantity, quantity_unit, unit, category or "Other"),
             )
             inserted += 1
 
@@ -872,7 +887,7 @@ async def list_inventory_items(
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, product_name, quantity, quantity_unit, unit, created_at, updated_at
+            SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
             FROM inventory
             ORDER BY id DESC
             LIMIT ?

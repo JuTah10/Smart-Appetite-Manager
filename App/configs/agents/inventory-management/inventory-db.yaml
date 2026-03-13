@@ -37,13 +37,14 @@ apps:
         - list_inventory_items: Return current inventory rows.
         - get_ingredient_names: Return comma-separated ingredient names for recipe search.
         - insert_inventory_items: Insert items. Expects an `items` parameter: a list of objects,
-          each with product_name (string), quantity (number), quantity_unit (string), unit (string).
+          each with product_name (string), quantity (number), quantity_unit (string), unit (string), category (string, optional).
+          Valid categories: Produce, Dairy, Meat, Seafood, Grains, Beverages, Snacks, Condiments, Frozen, Baking, Canned, Other.
           Auto-merges duplicates (same product_name + quantity_unit + unit) by increasing quantity.
         - increase_inventory_stock: Increase stock for one existing item.
         - decrease_inventory_stock: Decrease stock for one existing item.
         - delete_inventory_item: Permanently remove one item.
         - bulk_add_inventory_items: Insert multiple items at once. Expects an `items` parameter:
-          a list of objects, each with product_name, quantity, quantity_unit, unit.
+          a list of objects, each with product_name, quantity, quantity_unit, unit, category (optional).
           Auto-merges duplicates by increasing quantity. Use this for large batches.
         - bulk_delete_inventory_items: Delete multiple items at once. Expects an `items` parameter:
           a list of objects, each with at least product_name (and optionally quantity_unit, unit).

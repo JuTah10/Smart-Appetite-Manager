@@ -36,6 +36,22 @@ apps:
         - quantity (number): Numeric amount (e.g., 2, 500, 12)
         - quantity_unit (string): Unit of measurement (e.g., "kg", "g", "mL", "unit")
         - unit (string): Packaging/container type (e.g., "can", "loaf", "kg")
+        - category (string): One of: Produce, Dairy, Meat, Seafood, Grains, Beverages, Snacks, Condiments, Frozen, Baking, Canned, Other
+
+        CATEGORIZATION RULES:
+        Infer the category from the product name. Examples:
+        - Chicken breast, Ground beef, Pork chops -> Meat
+        - Salmon, Shrimp, Tuna -> Seafood
+        - Milk, Cheese, Yogurt, Butter, Cream -> Dairy
+        - Apples, Bananas, Lettuce, Tomatoes, Garlic, Onions -> Produce
+        - Rice, Pasta, Bread, Oats, Flour (as grain) -> Grains
+        - Olive oil, Soy sauce, Ketchup, Mustard, Vinegar -> Condiments
+        - Coffee, Tea, Juice, Soda, Water -> Beverages
+        - Chips, Crackers, Cookies, Popcorn -> Snacks
+        - Frozen pizza, Frozen vegetables, Ice cream -> Frozen
+        - Sugar, Baking powder, Vanilla extract, Yeast -> Baking
+        - Canned beans, Canned tomatoes, Canned soup -> Canned
+        - If unsure, use "Other".
 
         PARSING RULES:
 
@@ -71,9 +87,9 @@ apps:
 
         Example output:
         [
-          {"product_name": "Chicken breast", "quantity": 2, "quantity_unit": "kg", "unit": "kg"},
-          {"product_name": "Eggs", "quantity": 12, "quantity_unit": "unit", "unit": "unit"},
-          {"product_name": "Diced tomatoes (canned)", "quantity": 400, "quantity_unit": "g", "unit": "can"}
+          {"product_name": "Chicken breast", "quantity": 2, "quantity_unit": "kg", "unit": "kg", "category": "Meat"},
+          {"product_name": "Eggs", "quantity": 12, "quantity_unit": "unit", "unit": "unit", "category": "Dairy"},
+          {"product_name": "Diced tomatoes (canned)", "quantity": 400, "quantity_unit": "g", "unit": "can", "category": "Canned"}
         ]
 
         If any lines cannot be parsed, include them at the end as:

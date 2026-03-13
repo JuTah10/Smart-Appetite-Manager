@@ -13,6 +13,7 @@ export function useInventory(api, persistSession) {
   const [items, setItems] = useState([]);
   const [sortField, setSortField] = useState("updated_at");
   const [sortDirection, setSortDirection] = useState("desc");
+  const [categoryFilter, setCategoryFilter] = useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mutating, setMutating] = useState(false);
@@ -191,7 +192,10 @@ export function useInventory(api, persistSession) {
   }, []);
 
   const sortedItems = useMemo(() => {
-    const next = [...items];
+    const filtered = categoryFilter === "All"
+      ? [...items]
+      : items.filter((item) => (item.category || "Other") === categoryFilter);
+    const next = [...filtered];
     next.sort((a, b) => {
       let aVal, bVal;
       switch (sortField) {
@@ -211,6 +215,10 @@ export function useInventory(api, persistSession) {
           aVal = (a.unit || "").toLowerCase();
           bVal = (b.unit || "").toLowerCase();
           break;
+        case "category":
+          aVal = (a.category || "Other").toLowerCase();
+          bVal = (b.category || "Other").toLowerCase();
+          break;
         case "updated_at":
         default:
           aVal = String(a?.updated_at || a?.created_at || "");
@@ -224,7 +232,7 @@ export function useInventory(api, persistSession) {
       return aVal > bVal ? 1 : -1;
     });
     return next;
-  }, [items, sortField, sortDirection]);
+  }, [items, sortField, sortDirection, categoryFilter]);
 
   const toggleSort = useCallback((field) => {
     setSortField((prevField) => {
@@ -255,5 +263,7 @@ export function useInventory(api, persistSession) {
     clearDeleteProgress,
     newItemKeys,
     itemKey,
+    categoryFilter,
+    setCategoryFilter,
   };
 }

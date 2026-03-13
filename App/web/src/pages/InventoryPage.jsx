@@ -12,6 +12,14 @@ import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { CATEGORIES } from "@/lib/categoryConfig";
+import {
   MessageCircleIcon,
   RefreshCwIcon,
   PlusIcon,
@@ -119,15 +127,33 @@ export default function InventoryPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-xl">Items</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setChatOpen(true)}
-                className="gap-1.5"
-              >
-                <MessageCircleIcon className="w-3.5 h-3.5" />
-                Ask Assistant
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={inventory.categoryFilter}
+                  onValueChange={inventory.setCategoryFilter}
+                >
+                  <SelectTrigger className="w-[150px] h-8 text-sm">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Categories</SelectItem>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChatOpen(true)}
+                  className="gap-1.5"
+                >
+                  <MessageCircleIcon className="w-3.5 h-3.5" />
+                  Ask Assistant
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

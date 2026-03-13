@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getCategoryStyle } from "@/lib/categoryConfig";
 
 function formatUpdatedAt(value) {
   if (!value) return "—";
@@ -73,8 +74,11 @@ export function InventoryTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[300px]">
+            <TableHead className="w-[260px]">
               <SortableHeader field="product_name" label="Product" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
+            </TableHead>
+            <TableHead>
+              <SortableHeader field="category" label="Category" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
             </TableHead>
             <TableHead className="text-right">
               <SortableHeader field="quantity" label="Quantity" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} className="justify-end" />
@@ -107,6 +111,11 @@ export function InventoryTable({
                       New
                     </span>
                   )}
+                </TableCell>
+                <TableCell>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getCategoryStyle(item.category)}`}>
+                    {item.category || "Other"}
+                  </span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   <Badge

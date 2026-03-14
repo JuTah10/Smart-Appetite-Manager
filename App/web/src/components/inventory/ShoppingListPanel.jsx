@@ -112,7 +112,7 @@ export function ShoppingListPanel({
                 <button
                   type="button"
                   onClick={() => onToggle(item.id)}
-                  className="shrink-0 text-muted-foreground hover:text-emerald-600 transition-colors"
+                  className="shrink-0 text-muted-foreground hover:text-emerald-600 transition-colors cursor-pointer"
                   title={isChecked ? "Uncheck" : "Check"}
                 >
                   {isChecked ? (
@@ -142,7 +142,7 @@ export function ShoppingListPanel({
                 <button
                   type="button"
                   onClick={() => onDelete(item.id)}
-                  className="shrink-0 text-muted-foreground/50 hover:text-destructive transition-colors"
+                  className="shrink-0 text-muted-foreground/50 hover:text-destructive transition-colors cursor-pointer"
                   title="Remove"
                 >
                   <Trash2Icon className="w-4 h-4" />

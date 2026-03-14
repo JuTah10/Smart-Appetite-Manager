@@ -171,7 +171,7 @@ export function ScanReceiptDialog({ open, onOpenChange, client, onScanViaChat })
                   <img src={preview} alt="Receipt" className="w-full max-h-64 object-contain bg-gray-50" />
                   <button
                     onClick={() => { setFile(null); setPreview(null); }}
-                    className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70"
+                    className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 cursor-pointer"
                   >
                     <XIcon className="w-4 h-4" />
                   </button>

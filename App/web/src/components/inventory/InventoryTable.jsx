@@ -82,7 +82,7 @@ function CategoryFilterHeader({
       />
       <button
         type="button"
-        className={`p-0.5 rounded hover:bg-muted transition-colors ${isFiltered ? "text-emerald-600" : "text-muted-foreground"}`}
+        className={`p-0.5 rounded hover:bg-muted transition-colors cursor-pointer ${isFiltered ? "text-emerald-600" : "text-muted-foreground"}`}
         onClick={() => setOpen((prev) => !prev)}
         title="Filter by category"
       >
@@ -97,7 +97,7 @@ function CategoryFilterHeader({
             <button
               key={opt.value}
               type="button"
-              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between ${
+              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer flex items-center justify-between ${
                 categoryFilter === opt.value ? "font-semibold text-emerald-700 bg-emerald-50" : ""
               }`}
               onClick={() => {

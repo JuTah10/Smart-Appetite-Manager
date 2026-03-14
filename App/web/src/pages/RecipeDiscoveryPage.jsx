@@ -292,7 +292,7 @@ export default function RecipeDiscoveryPage() {
             <div className="mt-5 flex items-center gap-2 border-b border-orange-100 pb-3">
               <button
                 onClick={() => setActiveTab("discover")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "discover"
                     ? "bg-orange-500 text-white shadow-sm"
                     : "bg-white/70 text-muted-foreground hover:bg-orange-100"
@@ -303,7 +303,7 @@ export default function RecipeDiscoveryPage() {
               </button>
               <button
                 onClick={() => setActiveTab("research")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "research"
                     ? "bg-orange-500 text-white shadow-sm"
                     : "bg-white/70 text-muted-foreground hover:bg-orange-100"
@@ -314,7 +314,7 @@ export default function RecipeDiscoveryPage() {
               </button>
               <button
                 onClick={() => setActiveTab("saved")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "saved"
                     ? "bg-orange-500 text-white shadow-sm"
                     : "bg-white/70 text-muted-foreground hover:bg-orange-100"
@@ -330,7 +330,7 @@ export default function RecipeDiscoveryPage() {
               </button>
               <button
                 onClick={() => setActiveTab("cooking")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "cooking"
                     ? "bg-orange-500 text-white shadow-sm"
                     : "bg-white/70 text-muted-foreground hover:bg-orange-100"
@@ -527,7 +527,7 @@ export default function RecipeDiscoveryPage() {
                       <button
                         key={`inventory-best-${recipe.id}`}
                         type="button"
-                        className="w-full text-left rounded-lg border p-3 hover:bg-muted/40 transition-colors"
+                        className="w-full text-left rounded-lg border p-3 hover:bg-muted/40 transition-colors cursor-pointer"
                         onClick={() => void recipeDetail.open(recipe)}
                       >
                         <div className="flex items-start gap-3">
@@ -779,12 +779,7 @@ export default function RecipeDiscoveryPage() {
           onClick={() => setChatOpen(true)}
         >
           Ask SAM
-          <span className="relative w-9 h-9 shrink-0">
-            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow ring-2 ring-white/20">
-              <ChefHatIcon className="w-4.5 h-4.5 text-white" />
-            </span>
-            <img src="/SAM-Logo.png" alt="SAM" className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white shadow-md" />
-          </span>
+          <MessageCircleIcon className="w-5 h-5" />
         </Button>
       )}
 

@@ -352,7 +352,7 @@ function CookingYouTube({ savedRecipes = [] }) {
                   <button
                     key={`cook-yt-${recipe.id}`}
                     type="button"
-                    className="group relative rounded-lg overflow-hidden border hover:border-orange-300 transition-colors text-left"
+                    className="group relative rounded-lg overflow-hidden border hover:border-orange-300 transition-colors text-left cursor-pointer"
                     onClick={() => setActiveRecipeVideo(recipe)}
                   >
                     <img

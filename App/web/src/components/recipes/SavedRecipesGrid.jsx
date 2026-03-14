@@ -84,7 +84,7 @@ function Toolbar({ viewMode, setViewMode, onAddCategory }) {
           <button
             key={mode}
             onClick={() => setViewMode(mode)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               viewMode === mode
                 ? "bg-orange-500 text-white shadow-sm"
                 : "text-muted-foreground hover:bg-muted"
@@ -145,7 +145,7 @@ function CategoryDialog({ open, onOpenChange, onSubmit, initialName = "", initia
                   key={c.value}
                   type="button"
                   onClick={() => setColor(c.value)}
-                  className={`w-7 h-7 rounded-full ${c.dot} transition-all ${
+                  className={`w-7 h-7 rounded-full ${c.dot} transition-all cursor-pointer ${
                     color === c.value
                       ? "ring-2 ring-offset-2 ring-orange-400 scale-110"
                       : "hover:scale-105"
@@ -192,7 +192,7 @@ function CategoryHeader({ category, recipeCount, onRename, onDelete, onColorChan
       {!isUncategorized && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className={`p-1 rounded hover:bg-black/5 ${colorCfg.text}`}>
+            <button className={`p-1 rounded hover:bg-black/5 cursor-pointer ${colorCfg.text}`}>
               <MoreHorizontalIcon className="w-4 h-4" />
             </button>
           </DropdownMenuTrigger>
@@ -253,7 +253,7 @@ function DraggableRecipeCard({ recipe, onView, onToggleSave, isSaved, categories
       <div className="absolute top-2 left-2 z-10 sm:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1 rounded bg-white/80 backdrop-blur-sm shadow-sm">
+            <button className="p-1 rounded bg-white/80 backdrop-blur-sm shadow-sm cursor-pointer">
               <FolderIcon className="w-3.5 h-3.5 text-gray-600" />
             </button>
           </DropdownMenuTrigger>
@@ -413,7 +413,7 @@ function GridView({
             <div className={`flex items-center gap-2 ${colorCfg.bg}`}>
               <button
                 onClick={() => toggleCollapsed(cat.id)}
-                className="flex items-center gap-2 flex-1 px-3 py-2.5 text-left"
+                className="flex items-center gap-2 flex-1 px-3 py-2.5 text-left cursor-pointer"
               >
                 {isCollapsed ? (
                   <ChevronRightIcon className={`w-4 h-4 ${colorCfg.text}`} />
@@ -431,7 +431,7 @@ function GridView({
               {!isUncategorized && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className={`p-1 rounded hover:bg-black/5 mr-2 ${colorCfg.text}`}>
+                    <button className={`p-1 rounded hover:bg-black/5 mr-2 cursor-pointer ${colorCfg.text}`}>
                       <MoreHorizontalIcon className="w-4 h-4" />
                     </button>
                   </DropdownMenuTrigger>
@@ -501,7 +501,7 @@ function SortableHead({ label, field, sortField, sortDir, onSort, className = ""
       <button
         type="button"
         onClick={() => onSort(field)}
-        className="flex items-center gap-1 hover:text-foreground transition-colors -ml-1 px-1 py-0.5 rounded"
+        className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer -ml-1 px-1 py-0.5 rounded"
       >
         {label}
         {active ? (
@@ -738,7 +738,7 @@ function ListView({
                     <TableCell className="text-center" onClick={(e) => { e.stopPropagation(); setExpandedRow(isExpanded ? null : recipe.id); }}>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline cursor-pointer"
                         title="Click to expand ingredients"
                       >
                         <CheckCircle2Icon className="w-3 h-3" />
@@ -748,7 +748,7 @@ function ListView({
                     <TableCell className="text-center" onClick={(e) => { e.stopPropagation(); setExpandedRow(isExpanded ? null : recipe.id); }}>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline cursor-pointer"
                         title="Click to expand ingredients"
                       >
                         <XCircleIcon className="w-3 h-3" />

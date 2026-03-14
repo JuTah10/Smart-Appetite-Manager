@@ -13,13 +13,50 @@ export function responseToChatText(result) {
   if (result?.data && typeof result.data === "string") {
     return result.data;
   }
-  if (result?.raw && typeof result.raw === "object") {
-    return JSON.stringify(result.raw, null, 2);
-  }
-  if (result?.data && typeof result.data === "object") {
-    return JSON.stringify(result.data, null, 2);
+  // Try to humanize raw JSON tool results instead of dumping JSON
+  const rawObj = result?.raw ?? result?.data;
+  if (rawObj && typeof rawObj === "object") {
+    const friendly = humanizeToolResult(rawObj);
+    if (friendly) return friendly;
+    return JSON.stringify(rawObj, null, 2);
   }
   return "Done.";
+}
+
+/**
+ * Attempt to convert a raw JSON tool result into a friendly sentence.
+ * Returns null if the shape is unrecognized.
+ */
+function humanizeToolResult(obj) {
+  // Flatten nested response wrappers
+  const data = obj?.result?.status?.message?.parts?.[0]?.data ?? obj;
+
+  if (typeof data !== "object" || data === null) return null;
+
+  const status = data.status;
+  const item = data.item;
+  const name = item?.product_name || item?.name || "";
+
+  if (status === "success" && data.deleted && name) {
+    return `Done! I've removed **${name}** from your inventory.`;
+  }
+  if (status === "success" && data.added && name) {
+    return `Done! I've added **${name}** to your inventory.`;
+  }
+  if (status === "success" && data.updated && name) {
+    return `Done! I've updated **${name}** in your inventory.`;
+  }
+  if (status === "success" && typeof data.count === "number") {
+    return `Done! Found **${data.count}** items in your inventory.`;
+  }
+  if (status === "success") {
+    return "Done! The operation completed successfully.";
+  }
+  if (status === "error" && data.message) {
+    return `Something went wrong: ${data.message}`;
+  }
+
+  return null;
 }
 
 /**
@@ -71,18 +108,28 @@ export function extractRecipeData(text) {
   }
 
   const match = text.match(/```recipe_data\s*\n?([\s\S]*?)\n?```/i);
+  console.log("[extractRecipeData] regex matched:", !!match);
   if (!match) {
+    // Debug: check if the text has literal \n instead of real newlines
+    const hasLiteralEscapes = text.includes("\\n");
+    const hasBackticks = text.includes("```");
+    console.log("[extractRecipeData] hasLiteralEscapes:", hasLiteralEscapes, "hasBackticks:", hasBackticks);
+    if (hasLiteralEscapes) {
+      console.log("[extractRecipeData] Text near recipe_data:", text.slice(text.indexOf("recipe_data") - 10, text.indexOf("recipe_data") + 40));
+    }
     return { recipes: null, cleanText: text };
   }
 
   let recipes = null;
   try {
     const parsed = JSON.parse(match[1].trim());
+    console.log("[extractRecipeData] JSON.parse success, isArray:", Array.isArray(parsed), "length:", parsed?.length);
     if (Array.isArray(parsed) && parsed.length > 0) {
       recipes = parsed;
     }
-  } catch {
-    // invalid JSON in recipe_data block
+  } catch (e) {
+    console.error("[extractRecipeData] JSON.parse failed:", e.message);
+    console.log("[extractRecipeData] captured block preview:", match[1].slice(0, 200));
   }
 
   // Remove the recipe_data block from the displayed text

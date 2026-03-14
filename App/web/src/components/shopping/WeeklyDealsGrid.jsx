@@ -270,7 +270,7 @@ export function WeeklyDealsGrid({ deals, loading, error, onRefresh, freshness, c
           <AlertTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
           <span>
             Your inventory has changed since these deals were loaded.{" "}
-            <button onClick={onRefresh} className="underline font-medium hover:text-amber-950">
+            <button onClick={onRefresh} className="underline font-medium hover:text-amber-950 cursor-pointer">
               Refresh
             </button>{" "}
             to see updated deals.

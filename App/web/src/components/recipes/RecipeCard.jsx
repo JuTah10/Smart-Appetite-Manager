@@ -67,7 +67,7 @@ export function RecipeCard({ recipe, onView, onToggleSave, isSaved }) {
         {onToggleSave && (
           <button
             type="button"
-            className="absolute bottom-2.5 right-2.5 z-10 rounded-full p-1.5 backdrop-blur-sm bg-white/80 hover:bg-white text-gray-700 transition-colors shadow-sm"
+            className="absolute bottom-2.5 right-2.5 z-10 rounded-full p-1.5 backdrop-blur-sm bg-white/80 hover:bg-white text-gray-700 transition-colors shadow-sm cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onToggleSave(recipe);

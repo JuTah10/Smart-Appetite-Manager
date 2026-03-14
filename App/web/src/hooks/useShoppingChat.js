@@ -52,7 +52,7 @@ function extractItemsFromMapData(mapData) {
  */
 export function useShoppingChat(client, options = {}) {
   const {
-    welcomeText = "Smart Shopping Assistant ready! Ask me to find deals or plan your shopping route.",
+    welcomeText = "Smart Shopping Agent ready! Ask me to find deals or plan your shopping route.",
     idPrefix = "shopping",
     onComplete,
   } = options;

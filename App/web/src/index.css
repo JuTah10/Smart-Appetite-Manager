@@ -137,6 +137,9 @@
   body.inventory-chat-open .inventory-chat-shiftable {
     margin-right: var(--inventory-assistant-width);
   }
+  body.inventory-chat-open .chat-hide-branding {
+    display: none;
+  }
 }
 
 @keyframes highlight-fade {
@@ -151,3 +154,41 @@
 .animate-highlight-fade {
   animation: highlight-fade 4s ease-out forwards;
 }
+
+@keyframes scale-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes dash-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dash-animate {
+  opacity: 0;
+  animation: dash-fade-up 0.5s ease-out forwards;
+}
+
+.dash-delay-1 { animation-delay: 0.05s; }
+.dash-delay-2 { animation-delay: 0.12s; }
+.dash-delay-3 { animation-delay: 0.2s; }
+.dash-delay-4 { animation-delay: 0.28s; }
+.dash-delay-5 { animation-delay: 0.36s; }
+.dash-delay-6 { animation-delay: 0.44s; }

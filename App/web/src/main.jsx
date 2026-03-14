@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import { ChatOpenProvider } from "./context/ChatOpenContext";
 import "./index.css";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -19,15 +20,17 @@ function PageLoader() {
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/inventory" element={<InventoryPage />} />
-          <Route path="/recipes" element={<RecipeDiscoveryPage />} />
-          <Route path="/shopping" element={<ShoppingPage />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <ChatOpenProvider>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/recipes" element={<RecipeDiscoveryPage />} />
+            <Route path="/shopping" element={<ShoppingPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </ChatOpenProvider>
   </BrowserRouter>
 );

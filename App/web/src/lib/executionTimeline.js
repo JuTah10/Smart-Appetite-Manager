@@ -44,6 +44,20 @@ function extractSignals(payload) {
   return signals;
 }
 
+function extractAgentName(payload) {
+  const metadata = payload?.result?.status?.message?.metadata;
+  if (metadata?.agent_name) return normalizeText(metadata.agent_name);
+  const taskMeta = payload?.result?.metadata;
+  if (taskMeta?.agent_name) return normalizeText(taskMeta.agent_name);
+  return "";
+}
+
+function formatAgentLabel(rawName) {
+  return rawName
+    .replace(/([_-])/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function addAgentStatusStep(tracker, statusText) {
   const text = normalizeText(statusText);
   if (!text) return false;
@@ -66,11 +80,36 @@ function applySignal(tracker, signal) {
     const callId = normalizeText(signal.function_call_id);
     if (callId && tracker.toolCallStepIndex.has(callId)) return false;
 
+    const toolName = normalizeText(signal.tool_name) || "unknown";
+
+    // Detect peer agent calls and show an agent handoff
+    if (toolName.startsWith("peer_")) {
+      let peerAgent = "";
+      // Try to extract agent_name from tool_args metadata
+      const args = signal.tool_args;
+      if (args && typeof args === "object" && args.metadata?.agent_name) {
+        peerAgent = normalizeText(args.metadata.agent_name);
+      }
+      if (!peerAgent) {
+        // Derive from tool name: peer_InventoryDB -> InventoryDB
+        peerAgent = toolName.replace(/^peer_/, "");
+      }
+      const label = formatAgentLabel(peerAgent);
+      if (peerAgent !== tracker.currentAgent) {
+        tracker.currentAgent = peerAgent;
+        pushStep(tracker, {
+          kind: "agent_handoff",
+          status: "info",
+          title: `Agent: ${label}`,
+        });
+      }
+    }
+
     const argsPreview = safePreview(signal.tool_args, 140);
     pushStep(tracker, {
       kind: signalType,
       status: "running",
-      title: `Tool: ${normalizeText(signal.tool_name) || "unknown"}`,
+      title: `Tool: ${toolName}`,
       detail: argsPreview || undefined,
       callId: callId || undefined,
     });
@@ -172,6 +211,7 @@ export function createExecutionTimelineTracker() {
     toolCallStepIndex: new Map(),
     seenTexts: new Set(),
     seenArtifacts: new Set(),
+    currentAgent: "",
   };
 }
 
@@ -193,8 +233,48 @@ export function appendExecutionLifecycleStep(tracker, step) {
 
 export function applyStatusUpdateToTimeline(tracker, text, payload) {
   if (!tracker) return false;
+
+  const taskState = payload?.result?.status?.state;
   const signals = extractSignals(payload);
+  console.log("[Timeline] status_update", {
+    state: taskState,
+    signalCount: signals.length,
+    signalTypes: signals.map((s) => s.type),
+    textPreview: text?.slice(0, 100),
+    payloadKeys: Object.keys(payload?.result || {}),
+    statusKeys: Object.keys(payload?.result?.status || {}),
+    final: payload?.result?.final ?? payload?.final,
+  });
+
+  // When the task state is "completed", record a completion step but skip
+  // processing the response text so it doesn't appear as a timeline detail.
+  if (taskState === "completed") {
+    const already = tracker.seenTexts.has("__task_completed__");
+    if (!already) {
+      tracker.seenTexts.add("__task_completed__");
+      pushStep(tracker, {
+        kind: "lifecycle",
+        status: "completed",
+        title: "Task completed",
+      });
+    }
+    return !already;
+  }
+
   let changed = false;
+
+  // Detect agent handoffs
+  const agentName = extractAgentName(payload);
+  if (agentName && agentName !== tracker.currentAgent) {
+    tracker.currentAgent = agentName;
+    const label = formatAgentLabel(agentName);
+    pushStep(tracker, {
+      kind: "agent_handoff",
+      status: "info",
+      title: `Agent: ${label}`,
+    });
+    changed = true;
+  }
 
   for (const signal of signals) {
     changed = applySignal(tracker, signal) || changed;

@@ -194,13 +194,17 @@ export function AssistantPanel({
 
         {/* Header */}
         <div className={`flex h-14 items-center gap-3 px-4 border-b bg-gradient-to-r ${theme.headerBg}`}>
-          <img src="/SAM-Logo.png" alt="SAM" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-md" />
+          <div className="relative shrink-0">
+            <img src="/SAM-Logo.png" alt="SAM" className="w-9 h-9 rounded-full object-cover shadow-md" />
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+          </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-foreground leading-tight">
               {title}
             </h2>
-            <p className="text-xs text-muted-foreground leading-tight truncate">
-              {subtitle}
+            <p className="text-xs text-emerald-600 leading-tight flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Online
             </p>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose}>

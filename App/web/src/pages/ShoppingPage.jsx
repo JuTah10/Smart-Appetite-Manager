@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { typeIntoChat } from "@/lib/typeIntoChat";
+import { useChatOpen } from "@/context/ChatOpenContext";
 import { useGateway } from "@/api";
 import { AGENTS } from "@/api/agents";
 import { useGatewaySession } from "@/hooks/useGatewaySession";
@@ -46,14 +48,15 @@ export default function ShoppingPage() {
   useGatewaySession(client, STORAGE_KEYS, AGENTS.SHOPPER);
 
   const [activeTab, setActiveTab] = useState("weekly");
-  const [chatOpen, setChatOpen] = useState(false);
+  const { chatOpen, setChatOpen } = useChatOpen();
   const weeklyDeals = useWeeklyDeals();
   const prefillApplied = useRef(false);
+  const typingCleanup = useRef(null);
 
   // Single unified chat — smart-routes to ShopperAgent or RoutePlannerAgent
   const chat = useShoppingChat(client, {
     welcomeText:
-      "Smart Shopping Assistant ready! Ask me to find deals on specific items, or plan an optimal shopping route for your grocery list.",
+      "Hey! I'm your Smart Shopper. I can hunt down the best deals on your groceries and plan the most efficient shopping route. What are you looking to buy?",
     idPrefix: "shopping-chat",
   });
 
@@ -63,9 +66,10 @@ export default function ShoppingPage() {
     const itemsParam = searchParams.get("items");
     if (itemsParam) {
       prefillApplied.current = true;
-      chat.setInput(`Find deals on ${itemsParam}`);
       setChatOpen(true);
       setActiveTab("deals");
+      if (typingCleanup.current) typingCleanup.current();
+      typingCleanup.current = typeIntoChat(chat.setInput, `Find deals on ${itemsParam}`);
       // Clean up the URL
       setSearchParams({}, { replace: true });
     }
@@ -74,7 +78,8 @@ export default function ShoppingPage() {
   const handleQuickSuggestion = useCallback(
     (tag) => {
       setChatOpen(true);
-      chat.setInput(tag);
+      if (typingCleanup.current) typingCleanup.current();
+      typingCleanup.current = typeIntoChat(chat.setInput, tag);
     },
     [chat]
   );
@@ -183,11 +188,11 @@ export default function ShoppingPage() {
                 </h1>
                 <p className="text-sm md:text-base text-muted-foreground">
                   Search live weekly flyer deals and automatically get an optimized
-                  shopping route. One chat does it all.
+                  shopping route. SAM does it all.
                 </p>
               </div>
               <Button
-                className="shrink-0 gap-1.5"
+                className="shrink-0 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white"
                 onClick={() => setChatOpen(true)}
               >
                 <MessageCircleIcon className="w-4 h-4" />
@@ -199,21 +204,24 @@ export default function ShoppingPage() {
             <div className="mt-5 flex items-center gap-2 border-b border-blue-100 pb-3">
               <button
                 onClick={() => setActiveTab("weekly")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "weekly"
                     ? "bg-blue-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-blue-50"
+                    : "bg-white/70 text-muted-foreground hover:bg-blue-100"
                 }`}
               >
                 <TagIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
                 Deals this week
+                {weeklyDeals.freshness === "stale" && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-2 h-2 rounded-full bg-amber-400" />
+                )}
               </button>
               <button
                 onClick={() => setActiveTab("deals")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "deals"
                     ? "bg-blue-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-blue-50"
+                    : "bg-white/70 text-muted-foreground hover:bg-blue-100"
                 }`}
               >
                 <ShoppingCartIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
@@ -221,10 +229,10 @@ export default function ShoppingPage() {
               </button>
               <button
                 onClick={() => setActiveTab("route")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "route"
                     ? "bg-blue-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-blue-50"
+                    : "bg-white/70 text-muted-foreground hover:bg-blue-100"
                 }`}
               >
                 <RouteIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
@@ -242,7 +250,7 @@ export default function ShoppingPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleQuickSuggestion(tag)}
-                  className="bg-white"
+                  className="bg-white/80 hover:bg-blue-100"
                 >
                   <SparklesIcon className="w-3.5 h-3.5" />
                   {tag}
@@ -259,6 +267,8 @@ export default function ShoppingPage() {
             loading={weeklyDeals.loading}
             error={weeklyDeals.error}
             onRefresh={weeklyDeals.refresh}
+            freshness={weeklyDeals.freshness}
+            checking={weeklyDeals.checking}
           />
         )}
 
@@ -420,7 +430,7 @@ export default function ShoppingPage() {
                   <p className="text-sm text-muted-foreground max-w-md mx-auto">
                     {chat.sending
                       ? "Route optimization in progress..."
-                      : "Ask for deals in the chat and the route planner will automatically optimize your shopping trip."}
+                      : "Ask SAM for deals and the route planner will automatically optimize your shopping trip."}
                   </p>
                   {!chat.sending && (
                     <Button
@@ -442,19 +452,19 @@ export default function ShoppingPage() {
       {/* Chat FAB */}
       {!chatOpen && (
         <Button
-          className="fixed bottom-6 right-6 z-40 rounded-full shadow-xl h-12 px-4"
+          className="fixed bottom-6 right-6 z-40 rounded-full shadow-xl h-14 pl-5 pr-4 bg-sky-600 hover:bg-sky-700 text-white text-base gap-3"
           onClick={() => setChatOpen(true)}
         >
-          <MessageCircleIcon className="w-5 h-5 mr-1.5" />
-          Chat
+          Ask SAM
+          <MessageCircleIcon className="w-5 h-5" />
         </Button>
       )}
 
       <AssistantPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        title="Smart Shopper"
-        subtitle="Finds deals and optimizes your shopping route."
+        title="Smart Shopper Agent"
+        subtitle="Connected to SAM for deals and route planning."
         messages={chat.messages}
         activeTimeline={chat.activeTimeline}
         input={chat.input}
@@ -464,6 +474,7 @@ export default function ShoppingPage() {
         suggestions={QUICK_TAGS}
         onSuggestionClick={handleQuickSuggestion}
         theme={PANEL_THEMES.shopping}
+        sessionId={client?.getSessionId?.() || ""}
       />
     </div>
   );

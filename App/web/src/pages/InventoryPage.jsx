@@ -1,7 +1,10 @@
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { typeIntoChat } from "@/lib/typeIntoChat";
+import { useChatOpen } from "@/context/ChatOpenContext";
 import { useGateway } from "@/api";
 import { AGENTS } from "@/api/agents";
+import { inventoryRestApi } from "@/api/inventoryRest";
 import { useGatewaySession } from "@/hooks/useGatewaySession";
 import { useInventory } from "@/hooks/useInventory";
 import { useShoppingList } from "@/hooks/useShoppingList";
@@ -12,8 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { EditItemDialog } from "@/components/inventory/EditItemDialog";
 import { DeleteItemDialog } from "@/components/inventory/DeleteItemDialog";
+import { ScanReceiptDialog } from "@/components/inventory/ScanReceiptDialog";
 import { ShoppingListPanel } from "@/components/inventory/ShoppingListPanel";
+import { ReceiptGalleryPanel } from "@/components/inventory/ReceiptGalleryPanel";
 import { AssistantPanel, PANEL_THEMES } from "@/components/assistant/AssistantPanel";
+import { readReceiptImages, saveReceiptImage } from "@/lib/receiptStore";
 import {
   MessageCircleIcon,
   RefreshCwIcon,
@@ -21,7 +27,18 @@ import {
   PackageIcon,
   ListChecksIcon,
   ShoppingCartIcon,
+  CameraIcon,
+  ImageIcon,
+  SparklesIcon,
 } from "lucide-react";
+
+const INVENTORY_TAGS = [
+  { label: "What do I have?", prompt: "Show me everything in my inventory" },
+  { label: "Expiring soon", prompt: "What items in my inventory are expiring soon?" },
+  { label: "Low stock", prompt: "Which items are running low in my inventory?" },
+  { label: "Add items", prompt: "Add to my inventory: " },
+  { label: "Weekly summary", prompt: "Give me a weekly summary of my inventory changes" },
+];
 
 const STORAGE_KEYS = {
   gatewayUrl: "inventory_gateway_url",
@@ -42,28 +59,41 @@ export default function InventoryPage() {
   const shoppingList = useShoppingList();
   const chat = useAssistantChat(client, AGENTS.INVENTORY, {
     welcomeText:
-      "Inventory chat ready. Ask me to add, update, delete, or explain your inventory.",
+      "Hey there! I'm your Kitchen Agent. I can help you add items, update quantities, remove things, or just tell you what's in your pantry. What can I do for you?",
     idPrefix: "inventory-chat",
-    errorLabel: "Inventory chat failed",
+    errorLabel: "SAM inventory agent failed",
     onComplete: () => inventory.fetchItems({ background: true }),
   });
 
   const [activeTab, setActiveTab] = useState("inventory");
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const { chatOpen, setChatOpen } = useChatOpen();
+  const [scanOpen, setScanOpen] = useState(false);
+  const [receipts, setReceipts] = useState(() => readReceiptImages());
+  const refreshReceipts = useCallback(() => setReceipts(readReceiptImages()), []);
+  const typingCleanup = useRef(null);
+
+  const handleQuickSuggestion = useCallback((tag) => {
+    const prompt = typeof tag === "object" ? tag.prompt : tag;
+    setChatOpen(true);
+    if (typingCleanup.current) typingCleanup.current();
+    typingCleanup.current = typeIntoChat(chat.setInput, prompt);
+  }, [chat]);
 
   const handleFindDeals = () => {
     const unchecked = shoppingList.items.filter((it) => !it.checked);
     if (unchecked.length === 0) return;
     const names = unchecked.map((it) => it.product_name).join(", ");
-    const params = new URLSearchParams({ items: names });
-    navigate(`/shopping?${params}`);
+    setChatOpen(true);
+    if (typingCleanup.current) typingCleanup.current();
+    typingCleanup.current = typeIntoChat(chat.setInput, `Find the best deals for my shopping list: ${names}`);
   };
 
   const handleAddViaChat = () => {
     setChatOpen(true);
-    chat.setInput("Add to my inventory: ");
+    if (typingCleanup.current) typingCleanup.current();
+    typingCleanup.current = typeIntoChat(chat.setInput, "Add to my inventory: ");
   };
 
   const handleIncrease = async (item, amount) => {
@@ -100,8 +130,8 @@ export default function InventoryPage() {
                   Manage your kitchen inventory
                 </h1>
                 <p className="text-sm md:text-base text-muted-foreground">
-                  Track what you have, manage your shopping list, and let the
-                  assistant help you stay organized.
+                  Track what you have, manage your shopping list, and let SAM
+                  help you stay organized.
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {inventory.lastSyncedAt
@@ -121,7 +151,15 @@ export default function InventoryPage() {
                   />
                   {inventory.loading ? "Refreshing..." : "Refresh"}
                 </Button>
-                <Button onClick={handleAddViaChat} className="gap-1.5">
+                <Button
+                  variant="outline"
+                  onClick={() => setScanOpen(true)}
+                  className="gap-1.5"
+                >
+                  <CameraIcon className="w-3.5 h-3.5" />
+                  Scan Receipt
+                </Button>
+                <Button onClick={handleAddViaChat} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                   <PlusIcon className="w-4 h-4" />
                   Add Items
                 </Button>
@@ -132,10 +170,10 @@ export default function InventoryPage() {
             <div className="mt-5 flex items-center gap-2 border-b border-emerald-100 pb-3">
               <button
                 onClick={() => setActiveTab("inventory")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "inventory"
                     ? "bg-emerald-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-emerald-50"
+                    : "bg-white/70 text-muted-foreground hover:bg-emerald-100"
                 }`}
               >
                 <PackageIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
@@ -143,10 +181,10 @@ export default function InventoryPage() {
               </button>
               <button
                 onClick={() => setActiveTab("shopping-list")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   activeTab === "shopping-list"
                     ? "bg-emerald-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-emerald-50"
+                    : "bg-white/70 text-muted-foreground hover:bg-emerald-100"
                 }`}
               >
                 <ListChecksIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
@@ -154,6 +192,22 @@ export default function InventoryPage() {
                 {shoppingList.uncheckedCount > 0 && (
                   <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
                     {shoppingList.uncheckedCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("receipts")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                  activeTab === "receipts"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "bg-white/70 text-muted-foreground hover:bg-emerald-100"
+                }`}
+              >
+                <ImageIcon className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                Receipts
+                {receipts.length > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
+                    {receipts.length}
                   </span>
                 )}
               </button>
@@ -169,13 +223,12 @@ export default function InventoryPage() {
                 <CardTitle className="text-xl">Items</CardTitle>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
                     size="sm"
                     onClick={() => setChatOpen(true)}
-                    className="gap-1.5"
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     <MessageCircleIcon className="w-3.5 h-3.5" />
-                    Ask Assistant
+                    Ask Agent
                   </Button>
                 </div>
               </div>
@@ -250,16 +303,43 @@ export default function InventoryPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Receipts Gallery */}
+        {activeTab === "receipts" && (
+          <Card className="border-emerald-100">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-xl">Receipts</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setScanOpen(true)}
+                  className="gap-1.5"
+                >
+                  <CameraIcon className="w-3.5 h-3.5" />
+                  Scan Receipt
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ReceiptGalleryPanel
+                receipts={receipts}
+                onRefresh={refreshReceipts}
+                onScanClick={() => setScanOpen(true)}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Chat FAB */}
       {!chatOpen && (
         <Button
-          className="fixed bottom-6 right-6 z-40 rounded-full shadow-xl h-12 px-4"
+          className="fixed bottom-6 right-6 z-40 rounded-full shadow-xl h-14 pl-5 pr-4 bg-emerald-600 hover:bg-emerald-700 text-white text-base gap-3"
           onClick={() => setChatOpen(true)}
         >
-          <MessageCircleIcon className="w-5 h-5 mr-1.5" />
-          Chat
+          Ask SAM
+          <MessageCircleIcon className="w-5 h-5" />
         </Button>
       )}
 
@@ -286,18 +366,38 @@ export default function InventoryPage() {
         deleteProgress={inventory.deleteProgress}
       />
 
+      <ScanReceiptDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        client={client}
+        onScanViaChat={(filename, receiptImageDataUrl) => {
+          // Save to receipt gallery
+          saveReceiptImage({ filename, dataUrl: receiptImageDataUrl }).then(refreshReceipts);
+          // Open chat panel immediately so user sees the send in progress
+          setChatOpen(true);
+          // Fire chat send in background — the panel will show typing indicator
+          chat.send(
+            `I just uploaded a receipt image called "${filename}". Please scan it and show me the items.`,
+            { receiptImage: receiptImageDataUrl }
+          );
+        }}
+      />
+
       <AssistantPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
-        title="Kitchen Assistant"
-        subtitle="I can help manage your inventory. Just ask!"
+        title="Kitchen Agent"
+        subtitle="Connected to SAM for inventory management."
         messages={chat.messages}
         activeTimeline={chat.activeTimeline}
         input={chat.input}
         onInputChange={chat.setInput}
         onSend={() => void chat.send()}
         sending={chat.sending}
+        suggestions={INVENTORY_TAGS}
+        onSuggestionClick={handleQuickSuggestion}
         theme={PANEL_THEMES.inventory}
+        sessionId={client?.getSessionId?.() || ""}
       />
     </div>
   );

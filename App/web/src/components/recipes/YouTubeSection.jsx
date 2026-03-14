@@ -223,7 +223,7 @@ export function CookingTimers() {
       <CardHeader className="pb-3">
         <button
           type="button"
-          className="flex items-center justify-between w-full text-left"
+          className="flex items-center justify-between w-full text-left cursor-pointer"
           onClick={() => setExpanded(!expanded)}
         >
           <div className="flex items-center gap-2">
@@ -470,7 +470,7 @@ export function YouTubeSection({ savedRecipes = [] }) {
                     <button
                       key={`yt-thumb-${recipe.id}`}
                       type="button"
-                      className="group relative rounded-lg overflow-hidden border hover:border-orange-300 transition-colors text-left"
+                      className="group relative rounded-lg overflow-hidden border hover:border-orange-300 transition-colors text-left cursor-pointer"
                       onClick={() => setActiveRecipeVideo(recipe)}
                     >
                       <img

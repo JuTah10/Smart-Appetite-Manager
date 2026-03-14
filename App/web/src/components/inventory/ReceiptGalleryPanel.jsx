@@ -70,7 +70,7 @@ export function ReceiptGalleryPanel({ receipts, onRefresh, onScanClick }) {
                 e.stopPropagation();
                 handleDelete(r.id);
               }}
-              className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 bg-black/60 text-white rounded-full p-1 hover:bg-red-600 transition-all"
+              className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 bg-black/60 text-white rounded-full p-1 hover:bg-red-600 transition-all cursor-pointer"
               title="Delete"
             >
               <Trash2Icon className="w-3 h-3" />

@@ -88,6 +88,59 @@ export class GatewayClient {
   }
 
   /**
+   * Upload a file as an artifact. If a session already exists and is valid,
+   * uses it; otherwise lets the gateway create a new session and adopts its ID.
+   *
+   * @param {File} file - The file to upload
+   * @param {string} [filename] - Override filename (defaults to file.name)
+   * @returns {Promise<object>} Upload response with uri, filename, sessionId, etc.
+   */
+  async uploadArtifact(file, filename) {
+    // Try with current session first; if none exists, let gateway create one
+    const existingSession = this.sessionId;
+    const form = new FormData();
+    form.append("upload_file", file);
+    if (existingSession) {
+      form.append("sessionId", existingSession);
+    }
+    if (filename) {
+      form.append("filename", filename);
+    }
+
+    let response = await fetch(`${this.gatewayUrl}/api/v1/artifacts/upload`, {
+      method: "POST",
+      body: form,
+    });
+
+    // If session validation failed (403), retry without session to create a new one
+    if (response.status === 403 && existingSession) {
+      const retryForm = new FormData();
+      retryForm.append("upload_file", file);
+      if (filename) {
+        retryForm.append("filename", filename);
+      }
+      response = await fetch(`${this.gatewayUrl}/api/v1/artifacts/upload`, {
+        method: "POST",
+        body: retryForm,
+      });
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Artifact upload failed (${response.status}): ${text}`);
+    }
+
+    const result = await response.json();
+
+    // Adopt the session ID from the upload response so the chat uses the same session
+    if (result.sessionId) {
+      this.sessionId = result.sessionId;
+    }
+
+    return result;
+  }
+
+  /**
    * Send a prompt to a specific agent and get the response via SSE streaming.
    *
    * @param {string} prompt - Natural language prompt
@@ -165,6 +218,12 @@ export class GatewayClient {
           const payload = JSON.parse(event.data);
           const text = extractDisplayText(payload);
 
+          console.log(`[Gateway] SSE event: ${kind}`, {
+            state: payload?.result?.status?.state,
+            final: payload?.result?.final ?? payload?.final,
+            textPreview: text?.slice(0, 120),
+          });
+
           if (kind === "status_update") {
             onStatus?.(text, payload);
           } else if (kind === "artifact_update") {
@@ -172,6 +231,7 @@ export class GatewayClient {
           } else if (kind === "final_response") {
             gotFinal = true;
             closeStream();
+            console.log("[Gateway] final_response:", payload);
             resolve({ text: text || JSON.stringify(payload, null, 2), raw: payload, taskId });
           } else if (kind === "error") {
             closeStream();

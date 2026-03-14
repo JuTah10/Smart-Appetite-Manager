@@ -38,7 +38,8 @@ export function createInventoryRestClient(baseUrl = DEFAULT_INVENTORY_API_URL) {
       (key) => key.toLowerCase() === "content-type"
     );
 
-    if (hasBody && method !== "GET" && method !== "HEAD" && !hasExplicitContentType) {
+    const isFormData = hasBody && options.body instanceof FormData;
+    if (hasBody && method !== "GET" && method !== "HEAD" && !hasExplicitContentType && !isFormData) {
       headers["Content-Type"] = "application/json";
     }
 
@@ -100,6 +101,23 @@ export function createInventoryRestClient(baseUrl = DEFAULT_INVENTORY_API_URL) {
 
     async clearCheckedShoppingListItems() {
       return request("/api/shopping-list/checked", { method: "DELETE" });
+    },
+
+    async scanReceipt(file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request("/api/receipt/scan", {
+        method: "POST",
+        body: formData,
+        headers: {},
+      });
+    },
+
+    async insertItems(items) {
+      return request("/api/inventory/items", {
+        method: "POST",
+        body: JSON.stringify({ items }),
+      });
     },
   };
 }

@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import sqlite3
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -17,6 +18,19 @@ VALID_CATEGORIES = {
     "Produce", "Dairy", "Meat", "Seafood", "Grains", "Beverages",
     "Snacks", "Condiments", "Frozen", "Baking", "Canned", "Other",
 }
+
+_DEFAULT_SHELF_LIFE_DAYS: Dict[str, int] = {
+    "Produce": 5, "Dairy": 7, "Meat": 3, "Seafood": 2,
+    "Grains": 180, "Beverages": 30, "Snacks": 90,
+    "Condiments": 180, "Frozen": 90, "Baking": 365,
+    "Canned": 365, "Other": 30,
+}
+
+
+def _estimate_expiry(category: Optional[str]) -> str:
+    days = _DEFAULT_SHELF_LIFE_DAYS.get(category or "Other", 30)
+    return (date.today() + timedelta(days=days)).isoformat()
+
 
 _DEFAULT_DB_PATH = os.getenv("INVENTORY_MANAGER_DB_NAME", "inventory.db")
 
@@ -72,6 +86,8 @@ def _ensure_inventory_schema(conn: sqlite3.Connection) -> None:
     if "category" not in existing_columns:
         cur.execute("ALTER TABLE inventory ADD COLUMN category TEXT DEFAULT 'Other'")
         cur.execute("UPDATE inventory SET category = 'Other' WHERE category IS NULL")
+    if "expires_at" not in existing_columns:
+        cur.execute("ALTER TABLE inventory ADD COLUMN expires_at TEXT")
 
     # Shopping list table
     cur.execute(
@@ -208,12 +224,15 @@ def _normalize_insert_item(item: Any) -> Tuple[Optional[Dict[str, Any]], Optiona
     )
     category = category_raw if category_raw in VALID_CATEGORIES else None
 
+    expires_at = _normalize_text(item.get("expires_at"))
+
     return {
         "product_name": product_name,
         "quantity": quantity,
         "quantity_unit": quantity_unit,
         "unit": unit,
         "category": category,
+        "expires_at": expires_at,
     }, None
 
 
@@ -225,7 +244,7 @@ def _find_existing_inventory_row(
 ) -> Optional[sqlite3.Row]:
     cur.execute(
         """
-        SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
+        SELECT id, product_name, quantity, quantity_unit, unit, category, expires_at, created_at, updated_at
         FROM inventory
         WHERE lower(trim(product_name)) = lower(trim(?))
           AND COALESCE(lower(trim(quantity_unit)), '') = COALESCE(lower(trim(?)), '')
@@ -272,7 +291,7 @@ def _find_existing_inventory_row_with_fallback(
 
     cur.execute(
         """
-        SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
+        SELECT id, product_name, quantity, quantity_unit, unit, category, expires_at, created_at, updated_at
         FROM inventory
         WHERE lower(trim(product_name)) = lower(trim(?))
         ORDER BY id DESC
@@ -374,6 +393,7 @@ async def insert_inventory_items(
             quantity_unit = normalized_item["quantity_unit"]
             unit = normalized_item["unit"]
             category = normalized_item.get("category")
+            expires_at = normalized_item.get("expires_at")
 
             existing = _find_existing_inventory_row(
                 cur=cur,
@@ -384,6 +404,15 @@ async def insert_inventory_items(
             if existing:
                 current_quantity = _parse_quantity(existing["quantity"], default=0.0)
                 new_quantity = current_quantity + quantity
+                # Keep the earliest expiry date
+                merged_expires = None
+                ex_existing = existing["expires_at"]
+                if ex_existing and expires_at:
+                    merged_expires = min(ex_existing, expires_at)
+                elif ex_existing:
+                    merged_expires = ex_existing
+                elif expires_at:
+                    merged_expires = expires_at
                 cur.execute(
                     """
                     UPDATE inventory
@@ -391,20 +420,25 @@ async def insert_inventory_items(
                         quantity_unit = COALESCE(?, quantity_unit),
                         unit = COALESCE(?, unit),
                         category = COALESCE(?, category),
+                        expires_at = COALESCE(?, expires_at),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                     """,
-                    (new_quantity, quantity_unit, unit, category, existing["id"]),
+                    (new_quantity, quantity_unit, unit, category, merged_expires, existing["id"]),
                 )
                 increased += 1
                 continue
 
+            # Auto-estimate expiry if not provided
+            if not expires_at:
+                expires_at = _estimate_expiry(category or "Other")
+
             cur.execute(
                 """
-                INSERT INTO inventory (product_name, quantity, quantity_unit, unit, category)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO inventory (product_name, quantity, quantity_unit, unit, category, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (product_name, quantity, quantity_unit, unit, category or "Other"),
+                (product_name, quantity, quantity_unit, unit, category or "Other", expires_at),
             )
             inserted += 1
 
@@ -886,7 +920,7 @@ async def list_inventory_items(
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at
+            SELECT id, product_name, quantity, quantity_unit, unit, category, expires_at, created_at, updated_at
             FROM inventory
             ORDER BY id DESC
             LIMIT ?
@@ -896,6 +930,236 @@ async def list_inventory_items(
         rows = [dict(row) for row in cur.fetchall()]
         log.info(f"{log_id} Retrieved {len(rows)} rows")
         return {"status": "success", "count": len(rows), "rows": rows}
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("read", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("read", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+async def search_inventory_items(
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    added_after: Optional[str] = None,
+    added_before: Optional[str] = None,
+    expiring_within_days: Optional[int] = None,
+    include_expired: bool = False,
+    limit: int = 50,
+    categories: Optional[List[str]] = None,
+    min_quantity: Optional[float] = None,
+    max_quantity: Optional[float] = None,
+    expired_only: bool = False,
+    missing_expiration: Optional[bool] = None,
+    updated_after: Optional[str] = None,
+    updated_before: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Search and filter inventory items. All parameters are optional — combine
+    them to narrow results.
+
+    TEXT SEARCH:
+    - query: substring match on product_name (case-insensitive).
+      Example: query="chick" matches "Chicken Breast", "Chickpeas".
+
+    CATEGORY FILTERS (use one, not both):
+    - category: exact match on a single category (e.g. "Dairy").
+    - categories: match ANY of several categories (e.g. ["Dairy", "Produce"]).
+      If both provided, categories takes precedence.
+      Valid values: Produce, Dairy, Meat, Seafood, Grains, Beverages, Snacks,
+                    Condiments, Frozen, Baking, Canned, Other.
+
+    QUANTITY FILTERS:
+    - min_quantity: items with quantity >= this value.
+      Example: min_quantity=5 for "what do I have a lot of?"
+    - max_quantity: items with quantity <= this value.
+      Example: max_quantity=0 for "what's out of stock?",
+               max_quantity=1 for "what am I running low on?"
+
+    EXPIRATION FILTERS:
+    - expiring_within_days: items expiring within N days from today.
+      Excludes already-expired items unless include_expired=True.
+    - include_expired: when True with expiring_within_days, also return
+      already-expired items. No effect without expiring_within_days.
+    - expired_only: return ONLY items already expired (expires_at < today).
+      Takes precedence over expiring_within_days if both set.
+    - missing_expiration: if True, return only items with NO expiration date.
+      If False, return only items that HAVE an expiration date. Omit to include both.
+
+    DATE FILTERS (ISO date strings, e.g. "2026-03-13"):
+    - added_after / added_before: filter on created_at.
+    - updated_after / updated_before: filter on updated_at.
+      Example: updated_after="2026-03-13" for "what changed recently?"
+
+    SORTING:
+    - sort_by: column and direction. Format: "<column>" or "<column>_asc"/"<column>_desc".
+      Columns: name, quantity, category, expires_at, created_at, updated_at.
+      Examples: "expires_at_asc" (soonest first), "quantity_asc" (lowest stock first),
+                "name" (alphabetical A-Z), "updated_at_desc" (recently changed first).
+      Default when omitted: "created_at_desc".
+
+    PAGINATION:
+    - limit: max rows to return (default 50, max 200).
+    """
+    log_id = "[InventoryTools:search_inventory_items]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("read", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        conditions = []
+        params = []
+
+        # --- Text search ---
+        if query:
+            conditions.append("product_name LIKE ?")
+            params.append(f"%{query}%")
+
+        # --- Category (multi takes precedence over single) ---
+        if categories and isinstance(categories, list) and len(categories) > 0:
+            placeholders = ", ".join("?" for _ in categories)
+            conditions.append(f"category IN ({placeholders})")
+            params.extend(categories)
+        elif category:
+            conditions.append("category = ?")
+            params.append(category)
+
+        # --- Quantity thresholds ---
+        if min_quantity is not None:
+            conditions.append("quantity >= ?")
+            params.append(min_quantity)
+        if max_quantity is not None:
+            conditions.append("quantity <= ?")
+            params.append(max_quantity)
+
+        # --- Expiration filters ---
+        if expired_only:
+            conditions.append("expires_at IS NOT NULL")
+            conditions.append("DATE(expires_at) < DATE('now')")
+        elif expiring_within_days is not None:
+            conditions.append("expires_at IS NOT NULL")
+            conditions.append("DATE(expires_at) <= DATE('now', ?)")
+            params.append(f"+{expiring_within_days} days")
+            if not include_expired:
+                conditions.append("DATE(expires_at) >= DATE('now')")
+
+        if missing_expiration is True:
+            conditions.append("expires_at IS NULL")
+        elif missing_expiration is False:
+            conditions.append("expires_at IS NOT NULL")
+
+        # --- Date filters: created_at ---
+        if added_after:
+            conditions.append("DATE(created_at) >= DATE(?)")
+            params.append(added_after)
+        if added_before:
+            conditions.append("DATE(created_at) < DATE(?)")
+            params.append(added_before)
+
+        # --- Date filters: updated_at ---
+        if updated_after:
+            conditions.append("DATE(updated_at) >= DATE(?)")
+            params.append(updated_after)
+        if updated_before:
+            conditions.append("DATE(updated_at) < DATE(?)")
+            params.append(updated_before)
+
+        # --- Sort ---
+        sort_column_map = {
+            "name": "product_name",
+            "quantity": "quantity",
+            "category": "category",
+            "expires_at": "expires_at",
+            "created_at": "created_at",
+            "updated_at": "updated_at",
+        }
+        default_directions = {
+            "name": "ASC",
+            "quantity": "DESC",
+            "category": "ASC",
+            "expires_at": "ASC",
+            "created_at": "DESC",
+            "updated_at": "DESC",
+        }
+
+        order_clause = "created_at DESC"
+        if sort_by:
+            sort_lower = sort_by.strip().lower()
+            direction = None
+            if sort_lower.endswith("_asc"):
+                sort_key = sort_lower[:-4]
+                direction = "ASC"
+            elif sort_lower.endswith("_desc"):
+                sort_key = sort_lower[:-5]
+                direction = "DESC"
+            else:
+                sort_key = sort_lower
+
+            if sort_key in sort_column_map:
+                col = sort_column_map[sort_key]
+                if direction is None:
+                    direction = default_directions.get(sort_key, "ASC")
+                order_clause = f"{col} {direction}"
+            else:
+                log.warning(f"{log_id} Unrecognized sort_by='{sort_by}', using default")
+
+        # Push NULLs to bottom when sorting by expires_at
+        if order_clause.startswith("expires_at"):
+            order_clause = f"expires_at IS NULL, {order_clause}"
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+        effective_limit = min(limit, 200)
+
+        sql = f"""
+            SELECT id, product_name, quantity, quantity_unit, unit,
+                   category, expires_at, created_at, updated_at
+            FROM inventory
+            WHERE {where}
+            ORDER BY {order_clause}
+            LIMIT ?
+        """
+        params.append(effective_limit)
+
+        cur.execute(sql, params)
+        rows = [dict(row) for row in cur.fetchall()]
+
+        filters_applied = {
+            "query": query,
+            "category": category,
+            "categories": categories,
+            "min_quantity": min_quantity,
+            "max_quantity": max_quantity,
+            "added_after": added_after,
+            "added_before": added_before,
+            "updated_after": updated_after,
+            "updated_before": updated_before,
+            "expiring_within_days": expiring_within_days,
+            "expired_only": expired_only if expired_only else None,
+            "missing_expiration": missing_expiration,
+            "sort_by": sort_by,
+        }
+        filters_applied = {k: v for k, v in filters_applied.items() if v is not None}
+
+        log.info(f"{log_id} Retrieved {len(rows)} rows with filters: {filters_applied}")
+        return {
+            "status": "success",
+            "count": len(rows),
+            "filters_applied": filters_applied,
+            "rows": rows,
+        }
     except sqlite3.Error as e:
         log.error(f"{log_id} SQLite error: {e}", exc_info=True)
         return _error_response("read", f"SQLite error: {e}")

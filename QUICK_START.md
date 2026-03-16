@@ -8,6 +8,7 @@
 | uv         | latest  | `brew install uv`          |
 | Node.js    | 18+     | `brew install node`        |
 | Docker     | 20.10+  | Docker Desktop (optional)  |
+| Tesseract  | 4+      | `brew install tesseract` (only if running OCR service locally) |
 
 ## First-Time Setup
 
@@ -94,7 +95,24 @@ This starts the in-memory broker, all agents, and the WebUI gateway.
 - API: http://localhost:8001
 - Docs: http://localhost:8001/docs
 
-### Step 3: Start the User Interface terminal
+### Step 3: Start the OCR Service (separate terminal, optional)
+
+The OCR service extracts product weight/size from flyer images. It requires Tesseract (`brew install tesseract` on macOS, `apt-get install tesseract-ocr` on Debian/Ubuntu).
+
+```bash
+# From repo root
+cd ocr_service && pip install -e . && uvicorn app:app --host 0.0.0.0 --port 8002 --reload
+```
+
+Then set the env var so the App connects to it:
+
+```bash
+export OCR_SERVICE_URL=http://localhost:8002
+```
+
+Or add `OCR_SERVICE_URL=http://localhost:8002` to `App/.env`. If omitted, OCR is simply skipped.
+
+### Step 4: Start the User Interface terminal
 
 ```bash
 cd App/web
@@ -115,6 +133,7 @@ Dev server runs on http://localhost:5173 with hot reload.
 | ------------------ | ---- |
 | WebUI Gateway      | 8000 |
 | Inventory REST API | 8001 |
+| OCR Service        | 8002 |
 | Vite dev server    | 5173 |
 
 ## Troubleshooting

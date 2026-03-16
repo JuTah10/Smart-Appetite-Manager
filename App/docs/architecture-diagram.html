@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAM Architecture Diagram</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3348;
+    --text: #e2e8f0;
+    --text-dim: #8892b0;
+    --accent-teal: #2dd4bf;
+    --accent-orange: #fb923c;
+    --accent-blue: #60a5fa;
+    --accent-purple: #a78bfa;
+    --accent-pink: #f472b6;
+    --accent-green: #4ade80;
+    --accent-red: #f87171;
+    --accent-yellow: #fbbf24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header .subtitle { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Main layout */
+  .main {
+    display: flex;
+    height: calc(100vh - 65px);
+  }
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    padding: 24px;
+  }
+  .detail-panel {
+    width: 380px;
+    min-width: 380px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 24px;
+    overflow-y: auto;
+    transition: transform 0.3s ease;
+  }
+  .detail-panel.hidden {
+    transform: translateX(100%);
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  .detail-panel h2 {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .detail-panel .type-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+  .detail-panel h3 {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 16px 0 8px;
+  }
+  .detail-panel p, .detail-panel li {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .detail-panel ul { padding-left: 16px; }
+  .detail-panel li { margin-bottom: 4px; }
+  .detail-panel code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--accent-teal);
+  }
+  .detail-panel .file-path {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: monospace;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .close-btn:hover { color: var(--text); border-color: var(--text-dim); }
+
+  /* SVG layer */
+  .svg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .svg-layer line, .svg-layer path {
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  /* Architecture layers */
+  .arch-layer {
+    position: relative;
+    z-index: 1;
+    margin-bottom: 16px;
+  }
+  .layer-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    padding-left: 4px;
+    font-weight: 600;
+  }
+  .layer-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Agent group containers */
+  .agent-group {
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+  }
+  .agent-group .group-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .agent-group .layer-row { justify-content: flex-start; }
+
+  /* Node cards */
+  .node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    min-width: 160px;
+    max-width: 220px;
+  }
+  .node:hover {
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(96, 165, 250, 0.15);
+  }
+  .node.active {
+    border-color: var(--accent-teal);
+    box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2);
+  }
+  .node .icon {
+    font-size: 22px;
+    margin-bottom: 6px;
+  }
+  .node .name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    line-height: 1.3;
+  }
+  .node .desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .node .port-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-family: monospace;
+  }
+  .node .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+  }
+
+  /* Color variants */
+  .node.frontend { border-left: 3px solid var(--accent-blue); }
+  .node.gateway { border-left: 3px solid var(--accent-teal); }
+  .node.orchestrator { border-left: 3px solid var(--accent-purple); }
+  .node.recipe { border-left: 3px solid var(--accent-orange); }
+  .node.shopper { border-left: 3px solid var(--accent-green); }
+  .node.inventory { border-left: 3px solid var(--accent-yellow); }
+  .node.external { border-left: 3px solid var(--accent-pink); }
+  .node.database { border-left: 3px solid var(--accent-red); }
+  .node.tool { border-left: 3px solid var(--text-dim); }
+
+  /* Connection lines */
+  .connection {
+    stroke: var(--border);
+    stroke-dasharray: 4 3;
+    opacity: 0.6;
+  }
+  .connection.active-line {
+    stroke: var(--accent-teal);
+    opacity: 1;
+    stroke-dasharray: none;
+  }
+
+  /* Flow arrows (animated) */
+  @keyframes flowDash {
+    to { stroke-dashoffset: -20; }
+  }
+  .flow-arrow {
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    animation: flowDash 1s linear infinite;
+  }
+
+  /* Responsive grid for agent groups */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+  }
+  @media (max-width: 1200px) {
+    .agents-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 900px) {
+    .agents-grid { grid-template-columns: 1fr; }
+    .detail-panel { width: 320px; min-width: 320px; }
+  }
+
+  /* Data flow section */
+  .flow-section {
+    margin-top: 24px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .flow-section summary {
+    padding: 14px 18px;
+    cursor: pointer;
+    background: var(--surface);
+    font-weight: 600;
+    font-size: 14px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .flow-section summary::before {
+    content: '\25B6';
+    font-size: 10px;
+    transition: transform 0.2s;
+  }
+  .flow-section[open] summary::before {
+    transform: rotate(90deg);
+  }
+  .flow-content {
+    padding: 16px 18px;
+    background: var(--surface2);
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .flow-step:last-child { margin-bottom: 0; }
+  .flow-step .step-num {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+  .flow-step .step-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .flow-step .step-text strong {
+    color: var(--accent-teal);
+  }
+
+  /* Tab controls */
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 20px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 24px;
+    padding: 12px 32px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .stat-value {
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* Hint */
+  .hint {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 40px;
+    line-height: 1.6;
+  }
+  .hint .hint-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* Env vars table in detail panel */
+  .env-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+    margin-top: 4px;
+  }
+  .env-table td {
+    padding: 4px 0;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  .env-table td:first-child {
+    font-family: monospace;
+    color: var(--accent-teal);
+    padding-right: 8px;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Smart Appetite Manager - System Architecture</h1>
+    <div class="subtitle">Solace Agent Mesh (SAM) Multi-Agent System | 10 Agents | 6 External APIs | 4 SQLite DBs</div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-blue)"></div>Frontend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-teal)"></div>Gateway</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-purple)"></div>Orchestrator</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-orange)"></div>Chef Agents</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-green)"></div>Shopper Agents</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-yellow)"></div>Inventory Agents</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-pink)"></div>External API</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-red)"></div>Database</div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-item"><span class="stat-value">10</span> Agents</div>
+  <div class="stat-item"><span class="stat-value">6</span> External APIs</div>
+  <div class="stat-item"><span class="stat-value">4</span> SQLite Databases</div>
+  <div class="stat-item"><span class="stat-value">20+</span> Custom Tools</div>
+  <div class="stat-item"><span class="stat-value">4</span> Frontend Pages</div>
+  <div class="stat-item"><span class="stat-value">2</span> Backend Services</div>
+</div>
+
+<div class="main">
+  <div class="canvas-area" id="canvasArea">
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('architecture')">Architecture</button>
+      <button class="tab-btn" onclick="switchTab('flows')">Data Flows</button>
+    </div>
+
+    <!-- ARCHITECTURE TAB -->
+    <div class="tab-content active" id="tab-architecture">
+
+      <!-- Layer 1: Frontend -->
+      <div class="arch-layer">
+        <div class="layer-label">Frontend (React + Vite)</div>
+        <div class="layer-row">
+          <div class="node frontend" onclick="showDetail('react-ui')">
+            <div class="icon">&#x1F310;</div>
+            <div class="name">React Web UI</div>
+            <div class="desc">4 pages: Dashboard, Inventory, Recipes, Shopping</div>
+            <span class="port-badge">:5173</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 2: Gateways / APIs -->
+      <div class="arch-layer">
+        <div class="layer-label">Gateway & API Layer</div>
+        <div class="layer-row">
+          <div class="node gateway" onclick="showDetail('sam-gateway')">
+            <div class="icon">&#x1F50C;</div>
+            <div class="name">SAM WebUI Gateway</div>
+            <div class="desc">SSE streaming, session management, agent routing</div>
+            <span class="port-badge">:8000</span>
+          </div>
+          <div class="node gateway" onclick="showDetail('inventory-api')">
+            <div class="icon">&#x2699;&#xFE0F;</div>
+            <div class="name">Inventory REST API</div>
+            <div class="desc">FastAPI - direct CRUD, receipt scan, flyer deals</div>
+            <span class="port-badge">:8001</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 3: Event Mesh + Orchestrator -->
+      <div class="arch-layer">
+        <div class="layer-label">Solace Event Mesh + Orchestration</div>
+        <div class="layer-row">
+          <div class="node orchestrator" onclick="showDetail('event-mesh')">
+            <div class="icon">&#x1F578;&#xFE0F;</div>
+            <div class="name">Solace Event Mesh</div>
+            <div class="desc">WebSocket broker, pub/sub message routing</div>
+          </div>
+          <div class="node orchestrator" onclick="showDetail('orchestrator')">
+            <div class="icon">&#x1F3AF;</div>
+            <div class="name">Orchestrator Agent</div>
+            <div class="desc">Task analysis, intent routing, multi-agent coordination</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 4: Agent Groups -->
+      <div class="arch-layer">
+        <div class="layer-label">Specialized Agents</div>
+        <div class="agents-grid">
+
+          <!-- Recipe Group -->
+          <div class="agent-group">
+            <span class="group-label" style="color:var(--accent-orange)">Recipe Domain (3 agents)</span>
+            <div class="layer-row" style="flex-direction:column; gap:10px; margin-top:6px;">
+              <div class="node recipe" onclick="showDetail('recipe-assistant')">
+                <div class="icon">&#x1F468;&#x200D;&#x1F373;</div>
+                <div class="name">RecipeAssistant</div>
+                <div class="desc">Router - classifies intent, delegates to specialists</div>
+              </div>
+              <div class="node recipe" onclick="showDetail('recipe-inventory')">
+                <div class="icon">&#x1F50D;</div>
+                <div class="name">RecipeInventorySearch</div>
+                <div class="desc">Find recipes from pantry ingredients</div>
+              </div>
+              <div class="node recipe" onclick="showDetail('recipe-general')">
+                <div class="icon">&#x1F4D6;</div>
+                <div class="name">RecipeGeneralSearch</div>
+                <div class="desc">Search, substitutes, conversions, random</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shopper Group -->
+          <div class="agent-group">
+            <span class="group-label" style="color:var(--accent-green)">Shopping Domain (2 agents)</span>
+            <div class="layer-row" style="flex-direction:column; gap:10px; margin-top:6px;">
+              <div class="node shopper" onclick="showDetail('shopper-agent')">
+                <div class="icon">&#x1F6D2;</div>
+                <div class="name">ShopperAgent</div>
+                <div class="desc">Flyer deal search, batch deals, store map</div>
+              </div>
+              <div class="node shopper" onclick="showDetail('route-planner')">
+                <div class="icon">&#x1F5FA;&#xFE0F;</div>
+                <div class="name">RoutePlannerAgent</div>
+                <div class="desc">Multi-factor route optimizer, TSP solver</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inventory Group -->
+          <div class="agent-group">
+            <span class="group-label" style="color:var(--accent-yellow)">Inventory Domain (4 agents)</span>
+            <div class="layer-row" style="flex-direction:column; gap:10px; margin-top:6px;">
+              <div class="node inventory" onclick="showDetail('inv-orchestrator')">
+                <div class="icon">&#x1F4E6;</div>
+                <div class="name">InventoryOrchestrator</div>
+                <div class="desc">User-facing manager, confirmation flows</div>
+              </div>
+              <div class="node inventory" onclick="showDetail('inv-db')">
+                <div class="icon">&#x1F4BE;</div>
+                <div class="name">InventoryDB</div>
+                <div class="desc">Silent CRUD worker for inventory & shopping list</div>
+              </div>
+              <div class="node inventory" onclick="showDetail('ingredient-parser')">
+                <div class="icon">&#x1F4DD;</div>
+                <div class="name">IngredientParser</div>
+                <div class="desc">Free-form text to structured JSON</div>
+              </div>
+              <div class="node inventory" onclick="showDetail('receipt-scanner')">
+                <div class="icon">&#x1F4F7;</div>
+                <div class="name">ReceiptScanner</div>
+                <div class="desc">Vision LLM OCR + product code enrichment</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Layer 5: External APIs -->
+      <div class="arch-layer">
+        <div class="layer-label">External Services & APIs</div>
+        <div class="layer-row">
+          <div class="node external" onclick="showDetail('spoonacular')">
+            <div class="icon">&#x1F372;</div>
+            <div class="name">Spoonacular API</div>
+            <div class="desc">Recipe search, ingredients, nutrition</div>
+          </div>
+          <div class="node external" onclick="showDetail('flipp')">
+            <div class="icon">&#x1F4F0;</div>
+            <div class="name">Flipp API</div>
+            <div class="desc">Grocery flyer deals, prices</div>
+          </div>
+          <div class="node external" onclick="showDetail('osm')">
+            <div class="icon">&#x1F30D;</div>
+            <div class="name">OpenStreetMap / Overpass</div>
+            <div class="desc">Store geolocation & geocoding</div>
+          </div>
+          <div class="node external" onclick="showDetail('food-apis')">
+            <div class="icon">&#x1F50E;</div>
+            <div class="name">Open Food Facts / UPCitemdb</div>
+            <div class="desc">Product code enrichment, barcode lookup</div>
+          </div>
+          <div class="node external" onclick="showDetail('vision-llm')">
+            <div class="icon">&#x1F441;&#xFE0F;</div>
+            <div class="name">Vision LLM</div>
+            <div class="desc">Receipt image parsing (Claude/GPT-4V)</div>
+          </div>
+          <div class="node external" onclick="showDetail('llm-service')">
+            <div class="icon">&#x1F9E0;</div>
+            <div class="name">LLM Service</div>
+            <div class="desc">OpenAI-compatible endpoint (Cerebras, etc.)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 6: Data Stores -->
+      <div class="arch-layer">
+        <div class="layer-label">Data Stores (SQLite)</div>
+        <div class="layer-row">
+          <div class="node database" onclick="showDetail('db-inventory')">
+            <div class="icon">&#x1F4BE;</div>
+            <div class="name">inventory_manager.db</div>
+            <div class="desc">inventory + shopping_list tables</div>
+          </div>
+          <div class="node database" onclick="showDetail('db-orchestrator')">
+            <div class="icon">&#x1F4BE;</div>
+            <div class="name">orchestrator-agent.db</div>
+            <div class="desc">Orchestrator session storage</div>
+          </div>
+          <div class="node database" onclick="showDetail('db-recipe')">
+            <div class="icon">&#x1F4BE;</div>
+            <div class="name">recipe_research.db</div>
+            <div class="desc">Recipe agent sessions</div>
+          </div>
+          <div class="node database" onclick="showDetail('db-gateway')">
+            <div class="icon">&#x1F4BE;</div>
+            <div class="name">webui-gateway.db</div>
+            <div class="desc">Gateway session management</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- DATA FLOWS TAB -->
+    <div class="tab-content" id="tab-flows">
+
+      <details class="flow-section" open>
+        <summary style="color:var(--accent-orange)">&#x1F372; Recipe Discovery Flow</summary>
+        <div class="flow-content">
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">1</div>
+            <div class="step-text">User enters recipe query in <strong>RecipeDiscoveryPage</strong> (Web UI)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-teal);color:var(--bg)">2</div>
+            <div class="step-text">Request sent via SSE to <strong>SAM Gateway</strong> (:8000) with session ID</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-purple);color:var(--bg)">3</div>
+            <div class="step-text"><strong>Orchestrator</strong> routes to <strong>RecipeAssistant</strong> (intent classifier)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-orange);color:var(--bg)">4</div>
+            <div class="step-text"><strong>RecipeAssistant</strong> classifies intent:
+              <br>- INVENTORY_RECIPE_SEARCH -> <strong>RecipeInventorySearch</strong>
+              <br>- GENERAL_RECIPE_SEARCH -> <strong>RecipeGeneralSearch</strong></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-orange);color:var(--bg)">5</div>
+            <div class="step-text"><strong>RecipeInventorySearch</strong>: calls <code>get_ingredient_names</code> from inventory DB, then <code>complex_search</code> / <code>get_top_3_meals</code> via <strong>Spoonacular API</strong></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-orange);color:var(--bg)">6</div>
+            <div class="step-text">Results scored by: pantry coverage (45%), preference match (25%), prep time (20%), missing count (10%)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">7</div>
+            <div class="step-text">Response with <code>recipe_data</code> JSON block parsed by frontend to render recipe cards</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="flow-section">
+        <summary style="color:var(--accent-green)">&#x1F6D2; Shopping & Route Planning Flow</summary>
+        <div class="flow-content">
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">1</div>
+            <div class="step-text">User requests deals in <strong>ShoppingPage</strong> (or clicks "Find Deals" from Inventory)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-teal);color:var(--bg)">2</div>
+            <div class="step-text">Can go via <strong>SAM Gateway</strong> (agent chat) or <strong>Inventory REST API</strong> (direct REST)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-green);color:var(--bg)">3</div>
+            <div class="step-text"><strong>ShopperAgent</strong> calls <code>find_deals_with_map</code> -> queries <strong>Flipp API</strong> for each item (max 10 concurrent)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-green);color:var(--bg)">4</div>
+            <div class="step-text">Filters non-grocery results, extracts weights via regex. Calls <strong>Overpass API</strong> to geocode stores</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-green);color:var(--bg)">5</div>
+            <div class="step-text"><strong>RoutePlannerAgent</strong> (optional): builds store-item matrix, generates 1/2/3-store combos + greedy route</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-green);color:var(--bg)">6</div>
+            <div class="step-text">Routes scored: price (35%), convenience (25%), coverage (25%), distance (15%) using Haversine + nearest-neighbor TSP</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">7</div>
+            <div class="step-text">Response with <code>shopper_map_data</code> + <code>route_plan_data</code> JSON blocks rendered as interactive map + route cards</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="flow-section">
+        <summary style="color:var(--accent-yellow)">&#x1F4E6; Inventory Management Flow</summary>
+        <div class="flow-content">
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">1</div>
+            <div class="step-text">User types "Add 2 kg rice, 1 L milk" in <strong>InventoryPage</strong> chat</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-yellow);color:var(--bg)">2</div>
+            <div class="step-text"><strong>InventoryOrchestrator</strong> delegates to <strong>IngredientParser</strong></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-yellow);color:var(--bg)">3</div>
+            <div class="step-text"><strong>IngredientParser</strong> returns structured JSON with product_name, quantity, unit, category</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-yellow);color:var(--bg)">4</div>
+            <div class="step-text"><strong>InventoryOrchestrator</strong> presents confirmation table to user (MANDATORY - never skips)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">5</div>
+            <div class="step-text">User confirms -> <strong>InventoryDB</strong> executes <code>insert_inventory_items</code> with auto-merge duplicates</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-red);color:var(--bg)">6</div>
+            <div class="step-text">Written to <strong>inventory_manager.db</strong> (SQLite). Frontend refetches via REST API (:8001)</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="flow-section">
+        <summary style="color:var(--accent-yellow)">&#x1F4F7; Receipt Scanning Flow</summary>
+        <div class="flow-content">
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-blue);color:var(--bg)">1</div>
+            <div class="step-text">User uploads receipt image via <strong>ScanReceiptDialog</strong></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-teal);color:var(--bg)">2</div>
+            <div class="step-text">Image sent to <strong>Inventory REST API</strong> (:8001) <code>POST /api/receipt/scan</code></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-yellow);color:var(--bg)">3</div>
+            <div class="step-text"><strong>ReceiptScanner</strong> calls <strong>Vision LLM</strong> to parse receipt (store brand decoding, POS abbreviations)</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-pink);color:var(--bg)">4</div>
+            <div class="step-text"><code>enrich_product_codes</code>: PLU lookup (500+ codes) -> <strong>Open Food Facts</strong> -> <strong>UPCitemdb</strong></div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-yellow);color:var(--bg)">5</div>
+            <div class="step-text">Items separated by <code>is_food</code> field. Food items presented for confirmation, non-food shown for reference</div>
+          </div>
+          <div class="flow-step">
+            <div class="step-num" style="background:var(--accent-red);color:var(--bg)">6</div>
+            <div class="step-text">After user confirms, food items inserted into <strong>inventory_manager.db</strong></div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div class="detail-panel hidden" id="detailPanel">
+    <button class="close-btn" onclick="hideDetail()">&times;</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+const details = {
+  'react-ui': {
+    title: 'React Web UI',
+    type: 'Frontend',
+    typeColor: 'var(--accent-blue)',
+    file: 'web/src/',
+    sections: [
+      { heading: 'Tech Stack', content: 'React 18 + Vite + React Router + Shadcn/ui + Tailwind CSS' },
+      { heading: 'Pages', list: [
+        '<strong>DashboardPage</strong> - Stats cards, weather, quick nav, trending ingredients',
+        '<strong>InventoryPage</strong> - Inventory table, shopping list panel, receipt scanner, assistant chat',
+        '<strong>RecipeDiscoveryPage</strong> - Recipe cards, search filters, inventory-based suggestions, details modal',
+        '<strong>ShoppingPage</strong> - Deal finder, store map, route optimizer, weekly deals grid',
+      ]},
+      { heading: 'API Clients', list: [
+        '<code>gateway.js</code> - SSE streaming to SAM Gateway (JSON-RPC)',
+        '<code>inventoryRest.js</code> - REST calls to FastAPI inventory service',
+        '<code>agents.js</code> - Agent abstraction layer (inventory, recipes, shopper, orchestrator)',
+      ]},
+      { heading: 'Key Patterns', list: [
+        'Session persistence via localStorage (gatewayUrl + sessionId)',
+        'Structured JSON blocks parsed from agent responses (recipe_data, shopper_map_data, route_plan_data)',
+        'Speech recognition hook for voice input',
+      ]},
+      { heading: 'Environment', table: [
+        ['VITE_GATEWAY_URL', 'http://localhost:8000'],
+        ['VITE_INVENTORY_API_URL', 'http://localhost:8001'],
+      ]},
+    ]
+  },
+
+  'sam-gateway': {
+    title: 'SAM WebUI Gateway',
+    type: 'Gateway',
+    typeColor: 'var(--accent-teal)',
+    file: 'configs/webui.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Main entry point for the Web UI. Handles SSE streaming, session management, file uploads, and agent message routing through the Solace Event Mesh.' },
+      { heading: 'Protocol', content: 'JSON-RPC over Server-Sent Events (SSE)' },
+      { heading: 'Event Types', list: [
+        '<code>status_update</code> - Agent processing status',
+        '<code>artifact_update</code> - File/artifact changes',
+        '<code>final_response</code> - Completed agent response',
+        '<code>error</code> - Error messages',
+      ]},
+      { heading: 'Features', list: [
+        'Session ID management across agent calls',
+        'File upload endpoint for receipts/images',
+        'Automatic agent name routing',
+      ]},
+      { heading: 'Database', content: '<code>webui-gateway.db</code> (SQLite) for session persistence' },
+    ]
+  },
+
+  'inventory-api': {
+    title: 'Inventory REST API',
+    type: 'Backend Service',
+    typeColor: 'var(--accent-teal)',
+    file: 'src/inventory_api/app.py',
+    sections: [
+      { heading: 'Purpose', content: 'FastAPI server providing direct REST access to inventory tools, bypassing the agent layer for simple CRUD operations.' },
+      { heading: 'Endpoints', list: [
+        '<code>GET /api/inventory/items</code> - List inventory',
+        '<code>POST /api/inventory/items</code> - Insert items (bulk)',
+        '<code>GET /api/shopping-list/items</code> - List shopping list',
+        '<code>POST /api/shopping-list/items</code> - Add to shopping list',
+        '<code>PATCH /api/shopping-list/items/{id}/toggle</code> - Check/uncheck item',
+        '<code>DELETE /api/shopping-list/items/{id}</code> - Remove item',
+        '<code>DELETE /api/shopping-list/checked</code> - Clear all checked',
+        '<code>POST /api/receipt/scan</code> - Upload & scan receipt image',
+        '<code>GET /api/flyer/deals</code> - Fetch deals (map view)',
+        '<code>GET /api/flyer/search</code> - Search single deal',
+        '<code>GET /health</code> - Health check',
+      ]},
+      { heading: 'CORS', content: 'Configurable via <code>INVENTORY_API_ALLOWED_ORIGINS</code>. Defaults: localhost:5173, 127.0.0.1:5173' },
+      { heading: 'Direct Tool Access', content: 'Calls Python tool functions directly (bypasses agent LLM layer). Passes tool_config with db_path and LLM settings.' },
+    ]
+  },
+
+  'event-mesh': {
+    title: 'Solace Event Mesh',
+    type: 'Infrastructure',
+    typeColor: 'var(--accent-purple)',
+    file: 'configs/shared_config.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Solace PubSub+ broker providing the event mesh backbone. All agents communicate through publish/subscribe topics on this broker.' },
+      { heading: 'Connection', content: 'WebSocket connection (default: <code>ws://localhost:8008</code>)' },
+      { heading: 'Features', list: [
+        'Pub/sub message routing between all agents',
+        'Temporary queues for dev/testing mode',
+        'VPN-based message segregation',
+        'Supports both dev mode and production Solace Cloud',
+      ]},
+      { heading: 'Environment', table: [
+        ['SOLACE_DEV_MODE', 'true (local) / false (cloud)'],
+        ['SOLACE_BROKER_URL', 'ws://localhost:8008'],
+        ['SOLACE_BROKER_VPN', 'Solace VPN name'],
+      ]},
+    ]
+  },
+
+  'orchestrator': {
+    title: 'Orchestrator Agent',
+    type: 'Core Agent',
+    typeColor: 'var(--accent-purple)',
+    file: 'configs/orchestrator.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Central coordinator that accepts all incoming tasks, analyzes intent, and delegates to specialized agents. Can also handle simple tasks directly.' },
+      { heading: 'Model', content: 'Planning Model (higher capability for routing decisions)' },
+      { heading: 'Capabilities', list: [
+        'Single-agent delegation (route to one specialist)',
+        'Multi-agent orchestration with data handoffs',
+        'Direct execution for simple tasks',
+        'Artifact management (create, return)',
+      ]},
+      { heading: 'Built-in Tools', list: [
+        '<code>artifact_management</code> - create/read/update/list/delete files',
+        '<code>data_analysis</code> - SQLite in-memory analysis',
+      ]},
+      { heading: 'Routing', content: 'Allows delegation to ALL agents (<code>["*"]</code>). Routes based on agent_card descriptions.' },
+      { heading: 'Database', content: '<code>orchestrator-agent.db</code>' },
+    ]
+  },
+
+  'recipe-assistant': {
+    title: 'RecipeAssistant',
+    type: 'Router Agent',
+    typeColor: 'var(--accent-orange)',
+    file: 'configs/agents/recipe_assistant.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Pure routing agent that understands user recipe intent, gathers preferences if needed, and delegates to the correct specialist. Does NOT search recipes directly.' },
+      { heading: 'Model', content: 'Planning Model' },
+      { heading: 'Routing Logic', list: [
+        '<strong>INVENTORY_RECIPE_SEARCH</strong> -> RecipeInventorySearch (when user wants to cook with what they have)',
+        '<strong>GENERAL_RECIPE_SEARCH</strong> -> RecipeGeneralSearch (search by name/cuisine/diet)',
+        '<strong>RECIPE_DETAILS</strong> -> RecipeGeneralSearch (specific recipe info)',
+        '<strong>INGREDIENT_INTELLIGENCE</strong> -> RecipeGeneralSearch (substitutes, conversions)',
+      ]},
+      { heading: 'Preference Gathering', content: 'Asks about diet, cuisine, intolerances, prep time only if not already specified. Skips clarification if intent is clear.' },
+      { heading: 'Allowed Agents', content: 'OrchestratorAgent, RecipeInventorySearch, RecipeGeneralSearch' },
+    ]
+  },
+
+  'recipe-inventory': {
+    title: 'RecipeInventorySearch',
+    type: 'Executor Agent',
+    typeColor: 'var(--accent-orange)',
+    file: 'configs/agents/recipe_inventory_search.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Finds recipes the user can make with their current pantry inventory. Scores and ranks results by ingredient coverage.' },
+      { heading: 'Workflow', list: [
+        '1. Fetch pantry via <code>get_ingredient_names</code> from inventory DB',
+        '2. Search with <code>complex_search</code> or <code>get_top_3_meals</code> (Spoonacular)',
+        '3. Fetch full details with <code>get_meal_details_bulk</code>',
+        '4. Score and rank by pantry match',
+      ]},
+      { heading: 'Tools (Python / Spoonacular)', list: [
+        '<code>get_ingredient_names</code> - Inventory DB lookup',
+        '<code>complex_search</code> - Advanced search with filters',
+        '<code>get_top_3_meals</code> - Top pantry matches',
+        '<code>search_meals</code> - Basic search',
+        '<code>get_meal_details_bulk</code> - Batch recipe details',
+        '<code>get_meal_details</code> - Single recipe details',
+      ]},
+      { heading: 'Scoring Algorithm', content: 'Pantry coverage (45%) + Preference match (25%) + Prep time (20%) + Missing count (10%)' },
+      { heading: 'Output', content: 'Markdown summary + <code>recipe_data</code> JSON block (required by frontend)' },
+    ]
+  },
+
+  'recipe-general': {
+    title: 'RecipeGeneralSearch',
+    type: 'Executor Agent',
+    typeColor: 'var(--accent-orange)',
+    file: 'configs/agents/recipe_general_search.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Handles general recipe searches by name, cuisine, or diet. Also provides ingredient intelligence: substitutions, unit conversions, and ingredient parsing.' },
+      { heading: 'Search Tools', list: [
+        '<code>complex_search</code> - Advanced multi-filter search',
+        '<code>search_meals</code> - Basic keyword search',
+        '<code>get_top_3_meals</code> - Top matches',
+        '<code>get_meal_details_bulk</code> / <code>get_meal_details</code>',
+        '<code>get_random_meal</code> - Random discovery',
+      ]},
+      { heading: 'Intelligence Tools', list: [
+        '<code>parse_ingredients</code> - Structure ingredient text',
+        '<code>convert_amounts</code> - Unit conversion (cups to grams, etc.)',
+        '<code>get_substitutes</code> - Ingredient alternatives',
+      ]},
+      { heading: 'Output', content: 'Markdown summary + <code>recipe_data</code> JSON block' },
+    ]
+  },
+
+  'shopper-agent': {
+    title: 'ShopperAgent',
+    type: 'Executor Agent',
+    typeColor: 'var(--accent-green)',
+    file: 'configs/agents/shopper.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Finds the best grocery deals from local store flyers. Searches the Flipp flyer aggregator, filters relevant results, and geocodes stores for map display.' },
+      { heading: 'Tools', list: [
+        '<code>check_local_flyers</code> - Search single item',
+        '<code>find_best_deals_batch</code> - Search multiple items (rate-limited: max 10 concurrent)',
+        '<code>find_deals_with_map</code> - Search + geocode stores for interactive map',
+      ]},
+      { heading: 'External APIs', list: [
+        '<strong>Flipp API</strong> - Flyer deal search (no API key needed)',
+        '<strong>OpenStreetMap Overpass API</strong> - Store geolocation',
+      ]},
+      { heading: 'Smart Filtering', list: [
+        'Excludes pet stores and non-grocery items',
+        'Fuzzy relevance matching on item names',
+        'Weight extraction via regex + optional OCR (pytesseract)',
+      ]},
+      { heading: 'Output', content: 'Store deal tables + one-stop shop recommendations + <code>shopper_map_data</code> JSON block for map rendering' },
+      { heading: 'Location Config', table: [
+        ['FLIPP_POSTAL_CODE', 'K1A 0A6 (default)'],
+        ['MAP_CENTER_LAT', '45.4215'],
+        ['MAP_CENTER_LNG', '-75.6972'],
+      ]},
+    ]
+  },
+
+  'route-planner': {
+    title: 'RoutePlannerAgent',
+    type: 'Executor Agent',
+    typeColor: 'var(--accent-green)',
+    file: 'configs/agents/route_planner.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Optimizes multi-store shopping routes by balancing price, convenience, item coverage, and travel distance. Uses combinatorial optimization with TSP approximation.' },
+      { heading: 'Algorithm', list: [
+        '1. Query Flipp for all items to build store-item price matrix',
+        '2. Generate candidate routes: all 1-store, 2-store, 3-store combos + greedy set-cover',
+        '3. Geocode unique stores via Nominatim',
+        '4. Score each route on 4 normalized factors',
+        '5. Return top 5 routes with detailed breakdowns',
+      ]},
+      { heading: 'Scoring Weights', list: [
+        '<strong>Price</strong> (35%) - Lower total cost',
+        '<strong>Convenience</strong> (25%) - Fewer stores',
+        '<strong>Coverage</strong> (25%) - More items available',
+        '<strong>Distance</strong> (15%) - Shorter travel (Haversine + nearest-neighbor TSP)',
+      ]},
+      { heading: 'Tools', list: [
+        '<code>plan_optimal_route</code> - Main optimization function',
+      ]},
+      { heading: 'External APIs', content: 'Flipp (deals) + Nominatim/OpenStreetMap (geocoding, rate-limited 1.1s/req)' },
+      { heading: 'Output', content: 'Best route analysis + top 3 alternatives + <code>route_plan_data</code> + <code>shopper_map_data</code> JSON blocks' },
+    ]
+  },
+
+  'inv-orchestrator': {
+    title: 'InventoryOrchestrator',
+    type: 'Coordinator Agent',
+    typeColor: 'var(--accent-yellow)',
+    file: 'configs/agents/inventory-management/inventory-orchestrator.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'User-facing coordinator for all inventory and shopping list operations. Delegates parsing, CRUD, and receipt scanning to specialized sub-agents. ALWAYS requires user confirmation before mutations.' },
+      { heading: 'Sub-Agents', list: [
+        '<strong>IngredientParser</strong> - Parse free-form text to structured JSON',
+        '<strong>InventoryDB</strong> - Execute CRUD on SQLite',
+        '<strong>ReceiptScanner</strong> - Extract items from receipt images',
+      ]},
+      { heading: 'Operations', list: [
+        '<strong>Inventory:</strong> view, add (bulk/single), increase/decrease stock, delete, bulk delete',
+        '<strong>Shopping List:</strong> add, view, check/uncheck, remove, clear checked',
+        '<strong>Receipt Scanning:</strong> upload image -> extract items -> separate food/non-food',
+      ]},
+      { heading: 'Mandatory Confirmation', content: 'ALL mutations (insert, update, delete) require explicit user confirmation. Never executes without "yes/confirm/looks good".' },
+      { heading: 'Database', content: '<code>inventory_manager.db</code> (shared with InventoryDB agent)' },
+    ]
+  },
+
+  'inv-db': {
+    title: 'InventoryDB',
+    type: 'Worker Agent',
+    typeColor: 'var(--accent-yellow)',
+    file: 'configs/agents/inventory-management/inventory-db.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Silent backend worker that executes database operations. Returns raw tool results only - no user interaction, no formatting.' },
+      { heading: 'Inventory Tools', list: [
+        '<code>list_inventory_items</code> - All items',
+        '<code>get_ingredient_names</code> - Comma-separated names for recipe search',
+        '<code>insert_inventory_items</code> - Bulk insert with auto-merge',
+        '<code>increase_inventory_stock</code> / <code>decrease_inventory_stock</code>',
+        '<code>delete_inventory_item</code> / <code>bulk_delete_inventory_items</code>',
+      ]},
+      { heading: 'Shopping List Tools', list: [
+        '<code>list_shopping_list_items</code> - All items (unchecked first)',
+        '<code>insert_shopping_list_items</code> - Bulk insert with auto-merge',
+        '<code>toggle_shopping_list_item</code> - Check/uncheck',
+        '<code>delete_shopping_list_item</code> / <code>clear_checked_shopping_list_items</code>',
+      ]},
+      { heading: 'Database Schema', content: '<code>inventory</code>: id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at<br><code>shopping_list</code>: id, product_name, quantity, quantity_unit, unit, category, checked, created_at, updated_at' },
+      { heading: 'Categories', content: 'Produce, Dairy, Meat, Seafood, Grains, Beverages, Snacks, Condiments, Frozen, Baking, Canned, Other' },
+    ]
+  },
+
+  'ingredient-parser': {
+    title: 'IngredientParser',
+    type: 'Worker Agent',
+    typeColor: 'var(--accent-yellow)',
+    file: 'configs/agents/inventory-management/ingredient-parser.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Converts natural language grocery lists into structured JSON. Handles numbered lists, bullet points, receipt-style text, and free-form input.' },
+      { heading: 'Parsing Rules', list: [
+        'Strip list markers (1., -, *, bullets)',
+        'Handle "Name: Quantity Unit" format',
+        'Container with weight: "Diced tomatoes (canned): 1 can (400g)" -> quantity=400, quantity_unit="g", unit="can"',
+        'Auto-categorize by product name',
+      ]},
+      { heading: 'Unit Normalization', content: 'kg, g, lb, oz, L, mL, cup, tbsp, tsp, unit, can, bottle, bag, box, jar, loaf, and more' },
+      { heading: 'Output', content: 'Pure JSON array only - no explanation text. Items that cannot be parsed are flagged separately.' },
+    ]
+  },
+
+  'receipt-scanner': {
+    title: 'ReceiptScanner',
+    type: 'Worker Agent',
+    typeColor: 'var(--accent-yellow)',
+    file: 'configs/agents/inventory-management/receipt-scanner.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'Extracts items from receipt images using Vision LLM, then enriches product codes via multiple APIs.' },
+      { heading: 'Pipeline', list: [
+        '1. <code>scan_receipt_image</code> - Vision LLM reads receipt image',
+        '2. Extract items array with product names, quantities, prices',
+        '3. <code>enrich_product_codes</code> - PLU/UPC lookup',
+        '4. Return complete JSON with food/non-food classification',
+      ]},
+      { heading: 'Vision LLM Features', list: [
+        'Store brand decoding (GV=Great Value, PC=President\'s Choice, KS=Kirkland)',
+        'POS abbreviation handling (BNLS=Boneless, CHK=Chicken)',
+        'Weight/size extraction from receipt text',
+        'Food vs. non-food classification',
+      ]},
+      { heading: 'Product Enrichment', list: [
+        '<strong>PLU lookup</strong> - 500+ built-in produce codes',
+        '<strong>Open Food Facts API</strong> - UPC product info',
+        '<strong>UPCitemdb</strong> - Barcode database (graceful fallback)',
+      ]},
+      { heading: 'Tools', list: [
+        '<code>scan_receipt_image</code> (src/receipt_agent/receipt_scanner_tools.py)',
+        '<code>enrich_product_codes</code> (src/receipt_agent/receipt_scanner_tools.py)',
+      ]},
+    ]
+  },
+
+  'spoonacular': {
+    title: 'Spoonacular API',
+    type: 'External API',
+    typeColor: 'var(--accent-pink)',
+    file: 'src/recipe_agent/mealdb_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Comprehensive recipe and food API. Provides search, nutritional info, ingredient intelligence, and cooking instructions.' },
+      { heading: 'Endpoints Used', list: [
+        '<code>/recipes/complexSearch</code> - Advanced multi-filter search',
+        '<code>/recipes/findByIngredients</code> - Search by ingredient list',
+        '<code>/recipes/random</code> - Random recipe',
+        '<code>/recipes/{id}/information</code> - Full recipe details',
+        '<code>/recipes/{id}/analyzedInstructions</code> - Step-by-step instructions',
+        '<code>/recipes/informationBulk</code> - Batch recipe fetch',
+        '<code>/recipes/parseIngredients</code> - Parse ingredient text',
+        '<code>/recipes/convert</code> - Unit conversions',
+        '<code>/food/ingredients/substitutes</code> - Find alternatives',
+      ]},
+      { heading: 'Auth', content: 'API key via <code>SPOONACULAR_API_KEY</code> env var' },
+      { heading: 'Base URL', content: '<code>https://api.spoonacular.com</code>' },
+      { heading: 'Used By', content: 'RecipeInventorySearch, RecipeGeneralSearch' },
+    ]
+  },
+
+  'flipp': {
+    title: 'Flipp API',
+    type: 'External API',
+    typeColor: 'var(--accent-pink)',
+    file: 'src/shopper_agent/grocery_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Grocery flyer aggregator. Provides real-time deal data from local stores based on postal code.' },
+      { heading: 'Base URL', content: '<code>https://backflipp.wishabi.com/flipp/items/search</code>' },
+      { heading: 'Parameters', list: [
+        '<code>postal_code</code> - Location for local deals',
+        '<code>locale</code> - Language/region (en-us)',
+        '<code>q</code> - Search query term',
+      ]},
+      { heading: 'Response Fields', content: 'price, sale_story, merchant_name, valid_from, valid_to, flyer_item_id, image_url' },
+      { heading: 'Auth', content: 'No API key required (public endpoint)' },
+      { heading: 'Rate Limiting', content: 'Application-level: max 10 concurrent requests' },
+      { heading: 'Used By', content: 'ShopperAgent, RoutePlannerAgent, Inventory REST API' },
+    ]
+  },
+
+  'osm': {
+    title: 'OpenStreetMap / Overpass API',
+    type: 'External API',
+    typeColor: 'var(--accent-pink)',
+    file: 'src/shopper_agent/grocery_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Provides store geolocation data for map rendering and route distance calculations.' },
+      { heading: 'APIs Used', list: [
+        '<strong>Overpass API</strong> (<code>https://overpass-api.de/api/interpreter</code>) - Query stores by brand name within radius',
+        '<strong>Nominatim</strong> - Geocode store addresses to lat/lng coordinates',
+      ]},
+      { heading: 'Usage', list: [
+        'Find nearby stores matching brand regex patterns',
+        'Calculate distances for route optimization (Haversine formula)',
+        'In-memory caching per batch to minimize API calls',
+      ]},
+      { heading: 'Rate Limits', content: 'Nominatim: 1.1 seconds between requests (enforced by application)' },
+      { heading: 'Used By', content: 'ShopperAgent (find_deals_with_map), RoutePlannerAgent (plan_optimal_route)' },
+    ]
+  },
+
+  'food-apis': {
+    title: 'Open Food Facts / UPCitemdb',
+    type: 'External API',
+    typeColor: 'var(--accent-pink)',
+    file: 'src/receipt_agent/receipt_scanner_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Product code enrichment for receipt scanning. Provides product names and categories from barcodes/PLU codes.' },
+      { heading: 'Enrichment Chain', list: [
+        '1. <strong>PLU Lookup</strong> - 500+ built-in produce codes (no API call)',
+        '2. <strong>Open Food Facts</strong> - Open-source food product database',
+        '3. <strong>UPCitemdb</strong> - Barcode/UPC database',
+      ]},
+      { heading: 'Fallback Behavior', content: 'Graceful degradation - if any API is unavailable, enrichment is skipped and original item data is preserved.' },
+      { heading: 'Used By', content: 'ReceiptScanner agent only' },
+    ]
+  },
+
+  'vision-llm': {
+    title: 'Vision LLM',
+    type: 'External Service',
+    typeColor: 'var(--accent-pink)',
+    file: 'src/receipt_agent/receipt_scanner_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Multimodal LLM that processes receipt images. Extracts product names, quantities, prices, and classifies items as food/non-food.' },
+      { heading: 'Model', content: 'Configured via <code>LLM_SERVICE_IMAGE_MODEL_NAME</code> env var. Typically Claude 4.5 Sonnet or GPT-4V compatible.' },
+      { heading: 'Vision Capabilities', list: [
+        'Read printed receipt text and decode abbreviations',
+        'Identify store brand codes (GV, PC, KS, etc.)',
+        'Extract weight/size info from item descriptions',
+        'Classify food vs. non-food items',
+        'Parse price and quantity information',
+      ]},
+      { heading: 'Used By', content: 'ReceiptScanner agent via <code>scan_receipt_image</code> tool' },
+    ]
+  },
+
+  'llm-service': {
+    title: 'LLM Service',
+    type: 'External Service',
+    typeColor: 'var(--accent-pink)',
+    file: 'configs/shared_config.yaml',
+    sections: [
+      { heading: 'Purpose', content: 'OpenAI-compatible LLM endpoint powering all agent reasoning. Supports multiple model tiers for different task complexities.' },
+      { heading: 'Model Tiers', list: [
+        '<strong>Planning Model</strong> - For orchestration & routing (Orchestrator, RecipeAssistant)',
+        '<strong>General Model</strong> - For user-facing agents (Shopper, Inventory, etc.)',
+        '<strong>Parsing Model</strong> - For text extraction (defaults to bedrock-claude-4-5-sonnet)',
+      ]},
+      { heading: 'Environment', table: [
+        ['LLM_SERVICE_ENDPOINT', 'OpenAI-compatible URL'],
+        ['LLM_SERVICE_API_KEY', 'API key'],
+        ['LLM_SERVICE_PLANNING_MODEL_NAME', 'Planning model ID'],
+        ['LLM_SERVICE_GENERAL_MODEL_NAME', 'General model ID'],
+        ['LLM_SERVICE_IMAGE_MODEL_NAME', 'Vision model ID'],
+      ]},
+      { heading: 'Used By', content: 'All 10 agents for reasoning and response generation' },
+    ]
+  },
+
+  'db-inventory': {
+    title: 'inventory_manager.db',
+    type: 'SQLite Database',
+    typeColor: 'var(--accent-red)',
+    file: 'src/inventory_agent/inventory_manager_tools.py',
+    sections: [
+      { heading: 'Purpose', content: 'Primary data store for the inventory and shopping list. Auto-creates schema on first use with migration support for older DBs.' },
+      { heading: 'Tables', list: [
+        '<strong>inventory</strong>: id, product_name, quantity, quantity_unit, unit, category, created_at, updated_at',
+        '<strong>shopping_list</strong>: id, product_name, quantity, quantity_unit, unit, category, checked, created_at, updated_at',
+      ]},
+      { heading: 'Categories (12)', content: 'Produce, Dairy, Meat, Seafood, Grains, Beverages, Snacks, Condiments, Frozen, Baking, Canned, Other' },
+      { heading: 'Features', list: [
+        'Auto-merge duplicates (same product_name + quantity_unit + unit)',
+        'Unit canonicalization (kg, g, L, mL, cup, etc.)',
+        'Schema migration for adding new columns',
+        'Category auto-assignment based on product name',
+      ]},
+      { heading: 'Accessed By', content: 'InventoryDB agent, InventoryOrchestrator, RecipeInventorySearch (via get_ingredient_names), Inventory REST API' },
+    ]
+  },
+
+  'db-orchestrator': {
+    title: 'orchestrator-agent.db',
+    type: 'SQLite Database',
+    typeColor: 'var(--accent-red)',
+    sections: [
+      { heading: 'Purpose', content: 'Session storage for the main Orchestrator agent. Maintains conversation context and task state.' },
+      { heading: 'Accessed By', content: 'Orchestrator Agent' },
+    ]
+  },
+
+  'db-recipe': {
+    title: 'recipe_research.db',
+    type: 'SQLite Database',
+    typeColor: 'var(--accent-red)',
+    sections: [
+      { heading: 'Purpose', content: 'Session storage for the RecipeAssistant router agent. Maintains recipe search context across conversation turns.' },
+      { heading: 'Accessed By', content: 'RecipeAssistant agent' },
+    ]
+  },
+
+  'db-gateway': {
+    title: 'webui-gateway.db',
+    type: 'SQLite Database',
+    typeColor: 'var(--accent-red)',
+    sections: [
+      { heading: 'Purpose', content: 'Session management for the SAM WebUI Gateway. Tracks active sessions, user connections, and message history.' },
+      { heading: 'Accessed By', content: 'SAM WebUI Gateway' },
+    ]
+  },
+};
+
+// Active node tracking
+let activeNode = null;
+
+function showDetail(id) {
+  const d = details[id];
+  if (!d) return;
+
+  // Remove previous active state
+  document.querySelectorAll('.node.active').forEach(n => n.classList.remove('active'));
+  // Find and set active node
+  const nodes = document.querySelectorAll('.node');
+  nodes.forEach(n => {
+    if (n.getAttribute('onclick')?.includes(id)) {
+      n.classList.add('active');
+    }
+  });
+
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+
+  let html = `<h2>${d.title}</h2>`;
+  html += `<span class="type-badge" style="background:${d.typeColor}22;color:${d.typeColor};border:1px solid ${d.typeColor}44">${d.type}</span>`;
+  if (d.file) html += `<span class="file-path">${d.file}</span>`;
+
+  for (const section of d.sections) {
+    html += `<h3>${section.heading}</h3>`;
+    if (section.content) {
+      html += `<p>${section.content}</p>`;
+    }
+    if (section.list) {
+      html += '<ul>';
+      for (const item of section.list) {
+        html += `<li>${item}</li>`;
+      }
+      html += '</ul>';
+    }
+    if (section.table) {
+      html += '<table class="env-table">';
+      for (const [key, val] of section.table) {
+        html += `<tr><td>${key}</td><td>${val}</td></tr>`;
+      }
+      html += '</table>';
+    }
+  }
+
+  content.innerHTML = html;
+  panel.classList.remove('hidden');
+  panel.style.position = 'relative';
+}
+
+function hideDetail() {
+  document.querySelectorAll('.node.active').forEach(n => n.classList.remove('active'));
+  document.getElementById('detailPanel').classList.add('hidden');
+}
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

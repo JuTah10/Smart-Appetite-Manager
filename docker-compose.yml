@@ -1,0 +1,46 @@
+services:
+  sam-app:
+    build:
+      context: App
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: App/.env
+    environment:
+      OCR_SERVICE_URL: http://ocr-service:8002
+    depends_on:
+      ocr-service:
+        condition: service_healthy
+
+  inventory-api:
+    build:
+      context: App
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file: App/.env
+    entrypoint: []
+    command:
+      [
+        "python3.11",
+        "-m",
+        "uvicorn",
+        "src.inventory_api.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+      ]
+
+  ocr-service:
+    build:
+      context: ocr_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

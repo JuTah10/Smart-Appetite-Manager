@@ -1,0 +1,12 @@
+[project]
+name = "ocr-service"
+version = "0.1.0"
+description = "OCR microservice for extracting text from flyer images"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "Pillow>=10.0.0",
+    "pytesseract>=0.3.10",
+]

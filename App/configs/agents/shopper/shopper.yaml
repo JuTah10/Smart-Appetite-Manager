@@ -1,7 +1,7 @@
 log:
   stdout_log_level: INFO
 
-!include ../shared_config.yaml
+!include ../../shared_config.yaml
 
 apps:
   - name: shopper-agent_app
@@ -15,8 +15,11 @@ apps:
       namespace: ${NAMESPACE, sam/}
       supports_streaming: true
       agent_name: "ShopperAgent"
-      display_name: "The Grocery Scout (Local Flyer Deals)"
-      model: *general_model
+      display_name: "Smart Grocery Planner"
+      model:
+        model: ${LLM_SERVICE_REASONING_MODEL_NAME}
+        api_base: ${LLM_SERVICE_ENDPOINT}
+        api_key: ${LLM_SERVICE_API_KEY}
       agent_init_function:
         module: "rate_limit_init"
         name: "setup_llm_rate_limit"
@@ -25,90 +28,113 @@ apps:
           wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
 
       instruction: |
-        You are a professional local shopper that finds the best grocery deals from current store flyers.
-        You use Flipp (a flyer aggregator) to search real-time weekly deals near the user's postal code.
+        You are a grocery shopping planner. Your job: pick the best 1-2 stores where the user
+        can buy their entire grocery list in the fewest stops.
 
-        Your job:
-        1) From the user's request, identify the list of ingredients to search for.
-        2) ALWAYS call find_deals_with_map(items=[...]) — even for a single item, wrap it in a list.
-           This ensures store coordinates are returned for the interactive map.
-        3) Group results BY STORE (not by item). Order stores from MOST deals to FEWEST.
-           For each store, list ALL searched items — if the store has no deal for an item, show `---`.
+        **WORKFLOW:**
+        1. User gives you a grocery list.
+        2. Call `find_deals_for_planning` with the items. This fetches flyer deals, filters junk,
+           and builds a store × item price matrix.
+        3. Read the `store_comparison` result. Pick 1-2 stores (see below).
+        4. Call `format_deals_overview` to get the collapsible all-deals section.
+        5. Build your `plan_items` array (see below) and call `format_shopping_plan` with it.
+        6. Output both `formatted_markdown` results in order. Do not modify them.
 
-           Format:
+        **UNDERSTANDING THE DATA:**
 
-           ### [Store Name] (X of Y items found)
-           | Item | Price | Sale Info | Valid Until |
-           |------|-------|-----------|-------------|
-           | Chicken Breast | $4.88/lb | SAVE UP TO 48% | 2026-03-19 |
-           | Rice | --- | --- | --- |
-           | Broccoli | $1.99 | | 2026-03-19 |
+        Each store in `store_comparison` has:
+        - `tier`: budget / mid / premium (budget stores have lower regular prices)
+        - `deal_count`: number of flyer deals (but count alone is misleading — read on)
+        - `basket_total`: sum of all item prices (real + estimated), but can be misleading if products don't match
+        - `items`: per-item data with `price`, `name`, `detail`, `price_type`, `source`
 
-           If NO deals are found for ANY item at ANY store:
-           ⚠️ *No current flyer deals found for any of the requested items.*
+        Per-item fields that matter:
+        - `source`: "flyer" = real weekly deal, "ecom" = regular online price, "inferred" = estimated from Walmart baseline
+        - `detail`: short tag describing what the product actually is (e.g. "flavoured", "canned", "instant", "fresh boneless")
+        - `price_type`: "flat" = normal price, "per_lb"/"per_100g"/"per_kg" = weight-based.
+        - `name`: the full product name from the flyer
 
-        4) Parsing Rules:
-           - **Price**: ALWAYS show the FULL price string from results, including any unit info
-             (e.g., "$2.29 /100g $10.39 lb", "$8.99 /lb", "$4.88 lb", "$1.44 EACH").
-             The unit and weight info is critical for the user to compare deals fairly.
-             Do NOT strip or simplify the price — show it exactly as returned.
-           - **Sale Info**: Show the sale_story field (e.g., "Buy 2 for $5", "50% off").
-           - **Valid Until**: Show the valid_to date so the user knows when the deal expires.
-           - Show up to 5 options per item (pick the best deal per store if multiple exist).
-           - NEVER make up prices or deals. Only report what the tool returns.
-           - **Translate all content to English** — item descriptions, sale info, etc.
-           - When comparing deals across stores, pay attention to unit pricing.
-             For example, $2.29/100g ($10.39/lb) is MORE expensive than $4.88/lb.
-             Factor this into your One-Stop Shop recommendations.
+        **HOW TO REASON ABOUT STORES:**
 
-        5) **One-Stop Shop Recommendations**:
-           After the store tables, recommend the best store to buy all (or most) items in one trip.
-           - Format:
-             ### 🏆 Best One-Stop Shop: [Store Name]
-             * Items available here: [list items found at this store]
-             * Notes: [Why this is convenient]
+        Step 1 — Disqualify bad deals across ALL stores first.
+        Go through every store's items and mark deals as invalid if:
+        - The `detail` tag shows it's a different product than what the user wants.
+          Examples: user wants "milk" but deal is "flavoured milk" or "evaporated milk" or "chocolate milk" — these are NOT regular milk.
+          User wants "bread" but deal is "pita" or "baguette" or "brioche" or "garlic bread" — not regular bread.
+          User wants "rice" but deal is "instant rice" or "fast & fancy" — not regular rice.
+          User wants "butter" but deal is "jam/marmalade" — not butter at all.
+          
+          Use common sense to judge: what would a typical shopper mean by this item? If it's something specific, then look for something specific. If it's not, based on your best judgement. 
+        - `price_type` is "per_100g" — this is deceptive. $2.29/100g = $10.39/lb, which is expensive.
+        - The product name reveals it's clearly wrong (e.g. "salmon" when searching for "rice")
 
-             ### 🥈 Runner-Up: [Store Name]
-             * Items available here: [list]
-             * Notes: [Why this is a good alternative]
+        Step 2 — For each item, find the best VALID deal across all stores.
+        After disqualifying, look at the remaining flyer deals for each item and note which store
+        has the cheapest valid deal. This gives you an "ideal" per-item assignment:
+          chicken → IGA ($1.99/lb, fresh legs)
+          eggs → Shoppers ($3.49, large white)
+          milk → No Frills ($4.49, regular)
+          etc.
 
-        6) **Map Data Output** (CRITICAL — NEVER SKIP):
-           The find_deals_with_map tool returns a `shopper_map_data` object in its result.
-           You MUST ALWAYS include this data at the END of your response as a fenced code
-           block with the language tag `shopper_map_data`. The frontend parses this block
-           to render an interactive store map. Without it, the map will be empty.
-           Format — copy the EXACT JSON from the tool result:
-           ```shopper_map_data
-           {"stores": [...], "center": {...}, "recommended_store": "..."}
-           ```
-           NEVER omit this block. NEVER paraphrase or summarize it. Paste the raw JSON.
+        Step 3 — Pick 1-2 stores that cover the most items at good prices.
+        The ideal assignment might spread items across 5 stores — too many trips.
+        Now find the best practical combination:
+        - Look at which stores appear most often in the ideal assignment
+        - For each candidate store (or pair), calculate what the user would actually pay:
+          items with valid flyer deals → use the deal price
+          items without deals → the user pays regular price (use `estimated_price` from inferred data)
+        - Prefer budget/mid tier stores when prices are close — their regular (non-deal) prices are lower
+        - Only recommend 2 stores if the second store saves meaningful money on items the first store doesn't cover
+        - 1 store is usually better than 2 for convenience, unless the 2-store combo is significantly cheaper
+
+        Step 4 — Validate your final picks.
+        Before building plan_items, double-check each selected deal:
+        - Is the product actually what the user wants? (re-check `detail` and `name`)
+        - Is the price reasonable for this product category?
+        - If a store has no valid deal for an item, that's OK — note it uses the estimated regular price
+
+        **HOW TO BUILD plan_items:**
+
+        After picking stores, build an array where each element is one item from the grocery list.
+        For each item, pick the best deal from your chosen stores and include:
+        - `search_term`: the original grocery item exactly as it appears in store_comparison keys (e.g. "cheddar cheese")
+        - `store`: the store you chose for this item (e.g. "Super C")
+        - `price`: the price string including /lb or /100g if applicable (e.g. "$3.97", "$1.77/lb")
+        - `product`: the exact product name from the deal data (e.g. "FROMAGE EXTRA CHEDDAR KRAFT")
+
+        Example:
+        ```json
+        [
+          {"search_term": "cheddar cheese", "store": "Super C", "price": "$3.97", "product": "FROMAGE EXTRA CHEDDAR KRAFT"},
+          {"search_term": "broccoli", "store": "FreshCo", "price": "$1.77/lb", "product": "Broccoli Crowns Product of USA or Mexico"}
+        ]
+        ```
+
+        **RULES:**
+        - WAIT for tools to return before responding
+        - If the tool fails, say so — don't fabricate data
+        - Use EXACT values from the store_comparison data for price and product — never invent values
+        - Output the formatted_markdown exactly as returned — the formatting tools handle tables, images, and layout
 
       tools:
         - tool_type: python
           component_base_path: "src"
-          component_module: "shopper_agent.grocery_tools"
-          function_name: "check_local_flyers"
+          component_module: "shopper_agent.shopper_tools"
+          function_name: "find_deals_for_planning"
           tool_config:
             postal_code: ${FLIPP_POSTAL_CODE, K1A 0A6}
             locale: ${FLIPP_LOCALE, en-us}
-
+            api_base: ${LLM_SERVICE_ENDPOINT}
+            api_key: ${LLM_SERVICE_API_KEY}
+            model: ${LLM_SERVICE_GENERAL_MODEL_NAME}
         - tool_type: python
           component_base_path: "src"
-          component_module: "shopper_agent.grocery_tools"
-          function_name: "find_best_deals_batch"
-          tool_config:
-            postal_code: ${FLIPP_POSTAL_CODE, K1A 0A6}
-            locale: ${FLIPP_LOCALE, en-us}
-
+          component_module: "shopper_agent.shopper_tools"
+          function_name: "format_deals_overview"
         - tool_type: python
           component_base_path: "src"
-          component_module: "shopper_agent.grocery_tools"
-          function_name: "find_deals_with_map"
-          tool_config:
-            postal_code: ${FLIPP_POSTAL_CODE, K1A 0A6}
-            locale: ${FLIPP_LOCALE, en-us}
-            map_center_lat: ${MAP_CENTER_LAT, 45.4215}
-            map_center_lng: ${MAP_CENTER_LNG, -75.6972}
+          component_module: "shopper_agent.shopper_tools"
+          function_name: "format_shopping_plan"
 
       session_service:
         type: ${PERSISTENCE_TYPE, memory}
@@ -118,22 +144,25 @@ apps:
 
       agent_card:
         description: >
-          Finds the best grocery prices from current weekly flyers using Flipp.
-          Searches real-time flyer deals at local stores like Loblaws, Walmart, Metro,
-          FreshCo, Food Basics, and more. Use this agent when ingredients need to be
-          purchased or price-checked. No API key required.
+          Smart Grocery Planner — finds the best 1-2 stores to visit for your grocery list
+          by analyzing real-time weekly flyer deals from Flipp. Compares prices across 20+
+          local stores (Walmart, No Frills, Metro, Loblaws, Super C, FreshCo, etc.), filters
+          out irrelevant products, and recommends the optimal shopping trip.
+
+          Use this agent when:
+          - "Find me the best deals on milk, bread, and eggs"
+          - "Where should I shop for these groceries?"
+          - "I need chicken breast, rice, butter, onion — which stores?"
+          - "What's the cheapest way to buy my grocery list?"
+          - The user has a list of grocery items and wants to know where to buy them
+          - The user wants to compare prices across stores
+          - The user wants to minimize the number of store visits
         defaultInputModes: ["text"]
         defaultOutputModes: ["text"]
         skills:
-          - id: "flyer_search"
-            name: "Flyer Deal Search"
-            description: "Search current weekly flyer deals from local grocery stores via Flipp."
-          - id: "batch_deal_search"
-            name: "Batch Deal Finder"
-            description: "Find the best deals on multiple grocery items at once."
-          - id: "map_deal_search"
-            name: "Deal Finder with Store Map"
-            description: "Find deals on multiple items and get store locations for an interactive map."
+          - id: "deal_planning"
+            name: "Deal-Based Shopping Planner"
+            description: "Analyze flyer deals across 20+ stores to find the best 1-2 store combo for a grocery list."
 
       agent_card_publishing:
         interval_seconds: 10
@@ -143,4 +172,4 @@ apps:
 
       inter_agent_communication:
         allow_list: ["OrchestratorAgent", "RecipeResearchAgent"]
-        request_timeout_seconds: 60
+        request_timeout_seconds: 120

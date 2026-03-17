@@ -855,6 +855,164 @@ async def bulk_delete_inventory_items(
             pass
 
 
+# ── Ingredient categories for recipe-aware inventory queries ───────
+
+INGREDIENT_CATEGORIES = {
+    "Meat & Poultry": ["chicken", "beef", "pork", "lamb", "turkey", "duck", "bacon", "sausage", "ham", "steak", "ground"],
+    "Seafood": ["salmon", "shrimp", "tuna", "cod", "fish", "crab", "lobster", "prawn", "squid", "mussel"],
+    "Dairy & Eggs": ["milk", "cheese", "butter", "cream", "yogurt", "egg", "sour cream", "whipping"],
+    "Produce": ["tomato", "onion", "garlic", "pepper", "carrot", "potato", "lettuce", "spinach", "broccoli", "mushroom", "celery", "cucumber", "avocado", "corn", "bean", "pea", "zucchini", "eggplant", "cabbage", "kale"],
+    "Fruits": ["apple", "banana", "lemon", "lime", "orange", "berry", "strawberry", "blueberry", "mango", "pineapple", "grape", "peach", "pear"],
+    "Grains & Pasta": ["rice", "pasta", "noodle", "bread", "flour", "oat", "quinoa", "couscous", "tortilla", "wrap"],
+    "Condiments & Sauces": ["soy sauce", "vinegar", "ketchup", "mustard", "mayo", "hot sauce", "worcestershire", "teriyaki", "salsa", "pesto"],
+    "Oils & Fats": ["olive oil", "vegetable oil", "coconut oil", "sesame oil", "cooking spray"],
+    "Herbs & Spices": ["salt", "pepper", "cumin", "paprika", "oregano", "basil", "thyme", "rosemary", "cinnamon", "ginger", "turmeric", "chili", "parsley", "cilantro", "dill", "bay leaf", "nutmeg"],
+    "Canned & Preserved": ["canned", "tomato paste", "tomato sauce", "coconut milk", "broth", "stock"],
+    "Baking": ["sugar", "baking soda", "baking powder", "vanilla", "cocoa", "chocolate", "honey", "maple syrup", "yeast"],
+}
+
+RECIPE_CATEGORY_SHELF_LIFE_DAYS = {
+    "Meat & Poultry": 3,
+    "Seafood": 2,
+    "Dairy & Eggs": 7,
+    "Produce": 5,
+    "Fruits": 5,
+    "Grains & Pasta": 180,
+    "Condiments & Sauces": 90,
+    "Oils & Fats": 180,
+    "Herbs & Spices": 365,
+    "Canned & Preserved": 365,
+    "Baking": 180,
+    "Other": 14,
+}
+
+
+def _categorize_ingredient(product_name: str) -> str:
+    """Assign a food category to a product name via keyword matching."""
+    name_lower = product_name.lower()
+    for category, keywords in INGREDIENT_CATEGORIES.items():
+        for kw in keywords:
+            if kw in name_lower:
+                return category
+    return "Other"
+
+
+def _compute_priority(category: str, quantity: float, days_old: float) -> float:
+    """Compute a priority score (0.0-1.0) combining perishability, quantity, and age."""
+    shelf_life = RECIPE_CATEGORY_SHELF_LIFE_DAYS.get(category, 14)
+    perishability = 1.0 - min(shelf_life / 365.0, 1.0)
+    quantity_weight = min(quantity / 10.0, 1.0)
+    age_weight = min(days_old / shelf_life, 1.0) if shelf_life > 0 else 0.0
+    return round(0.50 * perishability + 0.30 * quantity_weight + 0.20 * age_weight, 3)
+
+
+async def get_inventory_for_recipes(
+    limit: int = 40,
+    tool_context: Optional[Any] = None,
+    tool_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return inventory items with quantities, grouped by food category, for intelligent recipe search."""
+    log_id = "[InventoryTools:get_inventory_for_recipes]"
+    db_path = _get_db_path(tool_config)
+    if not db_path:
+        return _error_response("read", "Missing db_path in tool_config.")
+
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = _open_sqlite(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT product_name, quantity, quantity_unit, updated_at "
+            "FROM inventory WHERE quantity > 0 ORDER BY product_name LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        log.info(f"{log_id} Found {len(rows)} item(s)")
+
+        if not rows:
+            return {
+                "status": "success",
+                "total_count": 0,
+                "use_first": [],
+                "items": [],
+                "by_category": {},
+                "ingredient_names_csv": "",
+            }
+
+        from datetime import datetime
+
+        now = datetime.utcnow()
+        items = []
+        for row in rows:
+            name = row["product_name"]
+            qty = row["quantity"] or 0
+            qty_unit = row["quantity_unit"] or "unit"
+            updated_at_str = row["updated_at"]
+            category = _categorize_ingredient(name)
+            shelf_life = RECIPE_CATEGORY_SHELF_LIFE_DAYS.get(category, 14)
+
+            days_old = 0.0
+            if updated_at_str:
+                try:
+                    updated_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00").replace("+00:00", ""))
+                    days_old = max((now - updated_dt).total_seconds() / 86400.0, 0.0)
+                except (ValueError, TypeError):
+                    pass
+
+            priority = _compute_priority(category, qty, days_old)
+            items.append({
+                "product_name": name,
+                "quantity": qty,
+                "quantity_unit": qty_unit,
+                "category": category,
+                "priority": priority,
+                "days_old": round(days_old, 1),
+                "shelf_life_days": shelf_life,
+            })
+
+        items.sort(key=lambda x: x["priority"], reverse=True)
+
+        use_first = []
+        for item in items:
+            if item["priority"] > 0.7:
+                use_first.append({
+                    **item,
+                    "reason": f"{item['category']} — {item['days_old']:.0f} of {item['shelf_life_days']} days shelf life used",
+                })
+
+        by_category: Dict[str, List[str]] = {}
+        for item in items:
+            cat = item["category"]
+            label = f"{item['product_name']} ({item['quantity']} {item['quantity_unit']}"
+            if item["priority"] > 0.7:
+                label += ", ⚠️ use soon"
+            label += ")"
+            by_category.setdefault(cat, []).append(label)
+
+        csv = ",".join(item["product_name"] for item in items)
+
+        return {
+            "status": "success",
+            "total_count": len(items),
+            "use_first": use_first,
+            "items": items,
+            "by_category": by_category,
+            "ingredient_names_csv": csv,
+        }
+    except sqlite3.Error as e:
+        log.error(f"{log_id} SQLite error: {e}", exc_info=True)
+        return _error_response("read", f"SQLite error: {e}")
+    except Exception as e:
+        log.error(f"{log_id} Unexpected error: {e}", exc_info=True)
+        return _error_response("read", f"Unexpected error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 async def get_ingredient_names(
     tool_context: Optional[Any] = None,
     tool_config: Optional[Dict[str, Any]] = None,

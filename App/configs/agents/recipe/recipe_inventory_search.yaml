@@ -32,15 +32,38 @@ apps:
 
         STEP 1 — GET INVENTORY:
         - If the message contains an Inventory JSON payload, extract ingredient names from it.
-        - Otherwise, call `get_ingredient_names` to fetch the current pantry list.
-        - Do NOT dump the inventory list back to the user. Just use the names for searching.
+        - Otherwise, call `get_inventory_for_recipes` to fetch the categorized pantry list
+          with quantities, categories, and priority scores.
+        - Do NOT dump the inventory list back to the user. Just use it for ingredient selection.
+
+        STEP 1.5 — SELECT INGREDIENTS FOR SEARCH:
+        Based on the inventory and the user's request, select 5-10 KEY ingredients for the API call.
+        Sending too many ingredients reduces search quality.
+
+        Selection strategy:
+        a) START with items from `use_first` — these are perishable items that should be used soon.
+           They are the highest priority for recipe search.
+        b) If the user MENTIONS specific ingredients (e.g., "something with chicken"),
+           ensure those ingredients are included even if they aren't in `use_first`.
+        c) Fill remaining slots with a balanced set from `by_category`:
+           - 1-2 proteins (from Meat & Poultry / Seafood)
+           - 2-3 vegetables/produce
+           - 1 grain/pasta/staple
+           - Skip pantry staples (salt, pepper, oil, flour, sugar) — Spoonacular ignores these anyway
+        d) Prefer items with HIGHER priority scores (combining perishability + quantity + age).
+        e) Aim for 5-10 ingredients total for optimal API results.
+        f) When user specifies a diet (e.g., vegetarian), exclude non-matching categories
+           (e.g., skip Meat & Poultry for vegetarian).
+        g) If the inventory has items past their shelf life (days_old > shelf_life_days),
+           WARN the user about those items and exclude them from search.
 
         STEP 2 — SEARCH RECIPES:
-        - If the user specified diet, cuisine, intolerances, or prep time → use `complex_search`.
+        - If the user specified diet, cuisine, intolerances, or prep time → use `complex_search`
+          with the selected 5-10 ingredients plus the relevant filters.
           complex_search already returns full recipe info (ingredients, instructions, diets, etc.)
           so you do NOT need to call get_meal_details afterward.
-        - If no filters → use `get_top_3_meals`, then call `get_meal_details_bulk` with
-          the comma-separated IDs to fetch full details for all recipes in ONE call.
+        - If no filters → use `get_top_3_meals` with the selected ingredients, then call
+          `get_meal_details_bulk` with the comma-separated IDs to fetch full details in ONE call.
 
         STEP 3 — RESPOND:
         - Present results sorted by match score.
@@ -79,7 +102,15 @@ apps:
         The ```recipe_data block is REQUIRED. Without it the frontend cannot display recipe cards.
 
       tools:
-        # Inventory tool
+        # Rich inventory tool (preferred for recipe search)
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "inventory_agent.inventory_manager_tools"
+          function_name: "get_inventory_for_recipes"
+          tool_config:
+            db_path: ${INVENTORY_MANAGER_DB_NAME}
+
+        # Fallback inventory tool
         - tool_type: python
           component_base_path: "src"
           component_module: "inventory_agent.inventory_manager_tools"

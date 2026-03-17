@@ -15,7 +15,10 @@ import {
   UsersIcon,
   CheckCircle2Icon,
   AlertCircleIcon,
+  MessageCircleIcon,
+  ShoppingCartIcon,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { normalizeText } from "@/lib/mealdb";
 
 /**
@@ -56,6 +59,7 @@ export function RecipeDetailsDialog({
   detailError,
   isSaved = false,
   onToggleSave,
+  onAskChef,
 }) {
   const title = recipeDetails?.title || selectedRecipe?.title || "Recipe details";
   const imageUrl = recipeDetails?.imageUrl || selectedRecipe?.imageUrl;
@@ -169,10 +173,23 @@ export function RecipeDetailsDialog({
                     )}
                     {(classified.missing.length > 0 || classified.unknown.length > 0) && (
                       <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 p-4">
-                        <h4 className="mb-2 font-semibold text-amber-800 flex items-center gap-1.5">
-                          <AlertCircleIcon className="w-4 h-4" />
-                          Need to Buy ({classified.missing.length + classified.unknown.length})
-                        </h4>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-amber-800 flex items-center gap-1.5">
+                            <AlertCircleIcon className="w-4 h-4" />
+                            Need to Buy ({classified.missing.length + classified.unknown.length})
+                          </h4>
+                          <Link
+                            to={`/shopping?items=${encodeURIComponent(
+                              [...classified.missing, ...classified.unknown].join(", ")
+                            )}`}
+                            onClick={() => onOpenChange(false)}
+                          >
+                            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7 border-amber-300 text-amber-800 hover:bg-amber-100">
+                              <ShoppingCartIcon className="w-3 h-3" />
+                              Find Deals
+                            </Button>
+                          </Link>
+                        </div>
                         <ul className="list-disc space-y-1 pl-5 text-sm text-amber-900">
                           {classified.missing.map((item, i) => (
                             <li key={`missing-${i}`}>{item}</li>
@@ -203,6 +220,25 @@ export function RecipeDetailsDialog({
                 </section>
 
                 <div className="flex flex-wrap gap-2">
+                  {onAskChef && (
+                    <Button
+                      className="bg-orange-500 hover:bg-orange-600 text-white"
+                      onClick={() => onAskChef({
+                        ...selectedRecipe,
+                        title,
+                        sourceUrl,
+                        readyInMinutes,
+                        servings,
+                        diets,
+                        cuisines,
+                        ingredients: allIngredients,
+                        instructions: recipeDetails?.instructions,
+                      })}
+                    >
+                      <MessageCircleIcon className="h-4 w-4" />
+                      Ask Chef Agent
+                    </Button>
+                  )}
                   {onToggleSave && (
                     <Button
                       variant={isSaved ? "default" : "outline"}

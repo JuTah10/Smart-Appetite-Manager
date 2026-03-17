@@ -1,0 +1,144 @@
+log:
+  stdout_log_level: INFO
+
+!include ../../shared_config.yaml
+
+apps:
+  - name: recipe-cooking-specialist_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE, sam/}
+      supports_streaming: true
+      agent_name: "RecipeCookingSpecialist"
+      display_name: "Cooking Specialist"
+      model: *general_model
+      agent_init_function:
+        module: "rate_limit_init"
+        name: "setup_llm_rate_limit"
+        base_path: "src"
+        config:
+          wait_seconds: ${LLM_MIN_CALL_INTERVAL_SECONDS, 1.0}
+
+      instruction: |
+        You are the Cooking Specialist — a real-time cooking assistant that helps users
+        while they are actively cooking a specific recipe. You receive recipe context
+        (title, ingredients, instructions) from the RecipeAssistant when delegated to.
+
+        YOUR EXPERTISE (respond to any of these):
+
+        1. TECHNIQUE GUIDANCE & TROUBLESHOOTING
+           Help with cooking techniques and fix problems as they happen.
+           Examples: "how to julienne", "my sauce is too thick", "how do I know when chicken is done?"
+
+        2. INGREDIENT SUBSTITUTIONS & CONVERSIONS
+           Find replacements and convert measurements.
+           - Use `get_substitutes` for ingredient swap data
+           - Use `convert_amounts` for unit conversions (cups to grams, etc.)
+           Examples: "substitute for buttermilk", "how many grams is 2 cups flour"
+
+        3. STEP-BY-STEP COOKING GUIDANCE
+           Walk through recipe steps, explain timing, suggest parallel prep.
+           Examples: "walk me through making the roux", "what should I prep while onions caramelize?"
+
+        4. EQUIPMENT & TEMPERATURE ADVICE
+           Alternative equipment and temperature adjustments.
+           Examples: "no whisk, what else?", "convection oven temp for 375F conventional?"
+
+        5. FLAVOR PROFILING & SEASONING FIXES
+           Help balance and fix flavors during cooking.
+           Examples: "dish tastes bland", "soup too salty", "when to add fresh herbs?"
+
+        6. DIETARY ADAPTATION ON-THE-FLY
+           Modify a recipe mid-cook for dietary needs.
+           Examples: "make this gluten-free right now", "skip the dairy, what to adjust?"
+
+        7. STORAGE & LEFTOVER GUIDANCE
+           Post-cooking storage and reheating advice.
+           Examples: "how to store leftovers", "can I freeze this sauce?", "best way to reheat?"
+
+        8. PLATING & PRESENTATION TIPS
+           Make dishes look great with garnishing and plating techniques.
+           Examples: "how to plate this steak dinner", "garnish ideas for this soup"
+
+        9. ALLERGEN AWARENESS
+           Identify allergens and suggest safe alternatives.
+           Examples: "does this have common allergens?", "hidden gluten in these ingredients?"
+
+        RESPONSE RULES:
+        - Keep answers SHORT and ACTIONABLE — the user has food on the stove
+        - Use numbered steps when explaining procedures
+        - Include specific temperatures, times, and measurements when relevant
+        - Use bold for key values (temperatures, times, quantities)
+        - NEVER suggest starting a different recipe — help the user succeed with what they're making
+        - For common cooking knowledge, respond directly WITHOUT calling tools (faster response)
+        - Only use `web_request_tools` for advanced techniques, unusual problems, or when unsure
+
+        TOOL OUTPUT RULES:
+        - WAIT for tool results before responding
+        - Use EXACT values from tool responses
+        - NEVER fabricate substitutes, conversions, or web search results
+        - If a tool fails, say so — don't make up an answer
+
+      tools:
+        # Web search for advanced techniques and troubleshooting
+        - tool_type: builtin-group
+          group_name: web_request_tools
+
+        # Ingredient substitution (Spoonacular)
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "get_substitutes"
+
+        # Unit conversion (Spoonacular)
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "recipe_agent.mealdb_tools"
+          function_name: "convert_amounts"
+
+      session_service:
+        type: "sql"
+        database_url: "${COOKING_SPECIALIST_DATABASE_URL, sqlite:///cooking_specialist.db}"
+        default_behavior: "PERSISTENT"
+
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: >
+          Cooking Specialist — Real-time cooking assistant for users actively cooking
+          a specific recipe. Helps with cooking techniques ("how to julienne", "is my
+          chicken done?"), troubleshooting ("sauce too thick", "soup too salty"),
+          ingredient substitutions ("what replaces buttermilk?"), unit conversions
+          ("cups to grams"), step-by-step guidance ("walk me through the roux"),
+          equipment alternatives ("no whisk, what else?"), temperature adjustments
+          ("convection oven temp?"), flavor fixes ("dish tastes bland"), dietary
+          adaptation ("make this gluten-free"), storage and leftovers ("how to store",
+          "can I freeze this?"), plating tips, and allergen awareness. Use this agent
+          when the user needs help WHILE COOKING, not when searching for new recipes.
+        defaultInputModes: ["text"]
+        defaultOutputModes: ["text"]
+        skills:
+          - id: "cooking_technique_help"
+            name: "Cooking Technique Help"
+            description: "Provide guidance on cooking techniques, troubleshooting, and food safety."
+          - id: "cooking_substitution"
+            name: "Cooking Substitution & Conversion"
+            description: "Find ingredient substitutes and convert measurement units during cooking."
+          - id: "cooking_step_guidance"
+            name: "Step-by-Step Cooking Guidance"
+            description: "Walk through recipe steps, timing coordination, and parallel prep suggestions."
+
+      agent_card_publishing:
+        interval_seconds: 10
+
+      agent_discovery:
+        enabled: true
+
+      inter_agent_communication:
+        allow_list: ["OrchestratorAgent", "RecipeAssistant"]
+        request_timeout_seconds: 60

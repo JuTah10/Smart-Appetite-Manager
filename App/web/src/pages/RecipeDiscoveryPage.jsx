@@ -149,6 +149,31 @@ export default function RecipeDiscoveryPage() {
     void recipeSearch.search(tag);
   }, [recipeSearch]);
 
+  const handleAskChef = useCallback((recipe) => {
+    if (!recipe) return;
+    const ingredients = (recipe.ingredients || [])
+      .map((i) => (typeof i === "string" ? i : i.ingredient || i.name || ""))
+      .filter(Boolean)
+      .slice(0, 20)
+      .join(", ");
+    const parts = [`I'm about to cook "${recipe.title}".`];
+    if (recipe.sourceUrl) parts.push(`Recipe link: ${recipe.sourceUrl}`);
+    if (ingredients) parts.push(`Ingredients: ${ingredients}.`);
+    if (recipe.readyInMinutes) parts.push(`Prep time: ${recipe.readyInMinutes} min.`);
+    if (recipe.instructions) {
+      const shortInstructions = recipe.instructions.length > 500
+        ? recipe.instructions.slice(0, 500) + "..."
+        : recipe.instructions;
+      parts.push(`Instructions: ${shortInstructions}`);
+    }
+    parts.push("Help me cook this recipe — any tips before I start?");
+    const prompt = parts.join("\n");
+
+    recipeDetail.close();
+    setChatOpen(true);
+    chat.setInput(prompt);
+  }, [chat, setChatOpen, recipeDetail]);
+
   // Fetch 4 random trending recipes on mount
   useEffect(() => {
     let cancelled = false;
@@ -834,6 +859,7 @@ export default function RecipeDiscoveryPage() {
         }}
         isSaved={recipeDetail.selectedRecipe ? saved.isRecipeSaved(recipeDetail.selectedRecipe.id) : false}
         onToggleSave={saved.toggleSave}
+        onAskChef={handleAskChef}
       />
     </div>
   );

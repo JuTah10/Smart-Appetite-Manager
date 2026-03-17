@@ -1,0 +1,120 @@
+log:
+  stdout_log_level: INFO
+
+!include ../../shared_config.yaml
+
+apps:
+  - name: live-pricing-agent_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE, sam/}
+      supports_streaming: true
+      agent_name: "LivePricingAgent"
+      display_name: "Live Store Pricing"
+      model: *general_model
+
+      instruction: |
+        You are a live grocery price lookup agent. You fetch current shelf prices
+        from Canadian grocery store websites and present them clearly.
+
+        **WORKFLOW:**
+        1. The user asks about prices for specific items at a specific store.
+        2. Parse the store name and the list of items from their request.
+        3. Call `search_store_prices` with the store and items.
+        4. Present results in this ORDER:
+          c. **Summary at the top** — Summary about the task that you was asked to do
+          b. **Full store results** — output the `formatted_markdown` from each
+            tool result EXACTLY as returned. Do NOT modify the markdown tables
+            or HTML tags — they contain images, collapsible sections, and
+            formatting that must be preserved.
+
+
+        **IMAGE RULE:**
+        ALWAYS include product images (![img](url)) in every table you create.
+        The formatted_markdown already has images. When you build your own
+        summary or deals tables, copy the image URLs from the tool results.
+
+        **SUPPORTED STORES:**
+        - Loblaws
+        - Real Canadian Superstore (also: "Superstore")
+        - No Frills
+        - Your Independent Grocer
+        - Provigo
+        - Maxi
+        - Metro
+        - Food Basics
+        - Super C
+        - Giant Tiger
+        - Voila
+        - FreshCo
+
+        **DETAILED MODE:**
+        By default, the tool returns slim product data (name, brand, price, deal,
+        sizing) optimized for price comparison. Only set `detailed=true` when the
+        user asks about specific product attributes like:
+        - Ingredients, nutrition, or allergens
+        - Product descriptions or details
+        - "Tell me more about this product"
+        - "Is this organic?" / "Is this gluten-free?"
+        Do NOT use detailed=true for price comparisons or "find the cheapest" queries.
+
+        **RULES:**
+        - WAIT for the tool to return before responding.
+        - Use the EXACT data returned by the tool — NEVER guess or fabricate prices.
+        - If the tool fails or returns no results, say so honestly.
+        - If the user asks about an unsupported store, tell them which stores are available.
+        - If the user doesn't specify a store, ask them which store they'd like to check.
+        - Keep max_results_per_item at 5 unless the user asks for more.
+        - When searching multiple stores, keep max_results_per_item at 5 to reduce data.
+        - These are live online shelf prices, not flyer/sale prices. They reflect
+          what you'd see on the store's website right now.
+
+      tools:
+        - tool_type: python
+          component_base_path: "src"
+          component_module: "shopper_agent.live_pricing.live_pricing_tools"
+          function_name: "search_store_prices"
+
+      session_service:
+        type: ${PERSISTENCE_TYPE, memory}
+        database_url: ${CUSTOM_AGENT_DATABASE_URL,}
+
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: >
+          Live Store Pricing Agent — fetches current shelf prices directly from
+          Canadian grocery store websites (Loblaws, Real Canadian Superstore,
+          No Frills, Your Independent Grocer, FreshCo, Metro, and more).
+          Shows product images, prices, sale indicators, member prices,
+          and package sizes.
+
+          Use this agent when:
+          - "Show me prices for eggs at Loblaws"
+          - "How much is chicken breast at No Frills?"
+          - "What does milk cost at Superstore right now?"
+          - "Look up live pricing for bread and butter at Independent Grocer"
+          - The user wants current shelf prices from a specific store
+          - The user wants to see what products are available at a store
+          - The user asks about today's prices, current prices, or live prices
+        defaultInputModes: ["text"]
+        defaultOutputModes: ["text"]
+        skills:
+          - id: "live_pricing"
+            name: "Live Store Price Lookup"
+            description: "Fetch current shelf prices from Canadian grocery store websites with product images and deal info."
+
+      agent_card_publishing:
+        interval_seconds: 10
+
+      agent_discovery:
+        enabled: true
+
+      inter_agent_communication:
+        allow_list: ["OrchestratorAgent"]
+        request_timeout_seconds: 120

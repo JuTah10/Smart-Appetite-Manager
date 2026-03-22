@@ -57,6 +57,7 @@ export function useRecipeDetails(client, sessionKey) {
           const normalized = normalizeAgentRecipeDetails(response.text, recipe);
           setDetails({
             ...normalized,
+            imageUrl: recipe.imageUrl || normalized.imageUrl,
             usedIngredients: recipe.usedIngredients || [],
             missingIngredients: recipe.missingIngredients || [],
             readyInMinutes: recipe.readyInMinutes || 0,
